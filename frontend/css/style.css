@@ -1,0 +1,13 @@
+:root {
+    --blue-primary: #1E3A8A;   /* Sidebar / Header (Navy) */
+    --blue-medium: #2563EB;    /* Card & Chart (Modern) */
+    --blue-light: #3B82F6;     /* Highlight */
+    --green-primary: #22C55E;  /* Indikator Naik / Profit */
+    --green-medium: #16A34A;   /* Icon / Accent */
+    --green-light: #4ADE80;    /* Background Lembut */
+    --background: #F8FAFC;
+    --card: #FFFFFF;
+    --text-primary: #1F2937;
+    --text-secondary: #6B7280;
+    --border: #E5E7EB;
+}
