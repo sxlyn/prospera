@@ -15,11 +15,14 @@ app.use(express.json());
 const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 // 2. Mendaftarkan rute antarmuka pemrograman aplikasi (API) ke dalam peladen (server)
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/analytics', analyticsRoutes);
+
 
 // Rute pengujian peladen (Root)
 app.get('/', (req, res) => {
