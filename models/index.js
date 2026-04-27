@@ -43,7 +43,11 @@ db.Sequelize = Sequelize;
 // Tambahkan baris ini untuk mendaftarkan relasi secara manual
 db.TransactionDetail.belongsTo(db.Product, { foreignKey: 'product_id_fk' });
 db.Product.hasMany(db.TransactionDetail, { foreignKey: 'product_id_fk' });
+db.TransactionDetail.belongsTo(db.Transaction, { foreignKey: 'transaction_id_fk' });
+db.Transaction.hasMany(db.TransactionDetail, { foreignKey: 'transaction_id_fk' });
+// --------------------
 
+module.exports = db;
 module.exports = db;
 module.exports = db;
 module.exports = db;

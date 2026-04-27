@@ -1,15 +1,13 @@
 const { Product } = require('../models');
 const { Op } = require('sequelize');
 
-// Mengambil daftar produk dengan stok rendah (Inventory Alert)
 const getLowStock = async (req, res) => {
     try {
-        const userId = req.user.id;
+        console.log(req.user);
 
-        // ambil batas stok dari query (default = 5)
+        const userId = req.user.id || req.user.user_id;
         const stockLimit = req.query.limit || 5;
 
-        // ambil data produk dengan stok di bawah batas
         const products = await Product.findAll({
             where: {
                 user_id_fk: userId,
