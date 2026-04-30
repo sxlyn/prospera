@@ -3,11 +3,11 @@
 **Prospera** adalah platform *Smart Economy* berbasis Node.js yang dirancang khusus untuk memberdayakan Usaha Mikro, Kecil, dan Menengah (UMKM) melalui pemanfaatan analisis data yang cerdas. Prospera hadir layaknya asisten digital yang membantu pelaku UMKM untuk lebih memahami kondisi usaha mereka sehari-hari. Oleh karena itu, sistem ini tidak hanya sekadar mencatat barang masuk dan keluar. Prospera dibekali dengan berbagai fitur pintar, seperti kemampuan untuk melihat tren penjualan bulanan, hingga memprediksi potensi pendapatan di masa depan. Pada akhirnya, melalui kemudahan pembuatan laporan keuangan yang serba otomatis, Prospera diharapkan bisa benar-benar membantu UMKM untuk "naik kelas" dan lebih mandiri secara teknologi maupun finansial.
 
 ## Anggota Tim 
-*   **** – NIM
-*   **** – NIM
-*   **** – NIM
-*   **** – NIM
-*   **** – NIM
+*   Nikita ho – 241110859
+*   Stefani Evelyn Sukamto – 241110227
+*   Ulya Salsabila – 241110485
+*   Chiquita Jesslyn – 241111605
+*   Irma Tiara – 241112440
 ---
 
 ## Panduan Setup (Instalasi & Menjalankan Server)
