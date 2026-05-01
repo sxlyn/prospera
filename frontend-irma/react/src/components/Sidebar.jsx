@@ -1,8 +1,8 @@
 function Sidebar({ currentPage, onNavigate }) {
     const menu = [
         { id: 'index', label: 'Analisis Lengkap', icon: 'fas fa-layer-group' },
-        { id: 'bi-analytics', label: '4.2 Analitik Bisnis', icon: 'fas fa-chart-bar' },
-        { id: 'smart-predict', label: '4.3 Fitur Pintar', icon: 'fas fa-robot' },
+        { id: 'bi-analytics', label: 'Analitik Bisnis', icon: 'fas fa-chart-bar' },
+        { id: 'smart-predict', label: 'Fitur Pintar', icon: 'fas fa-robot' },
     ];
 
     return (

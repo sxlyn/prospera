@@ -14,13 +14,12 @@ function BiAnalytics() {
     return (
         <>
             <div className="d-flex justify-content-between align-items-center mb-4">
-                <h3 className="fw-bold m-0">4.2 Analitik Bisnis (BI)</h3>
-                <div className="text-muted small">Wawasan performa mendalam</div>
+                <h3 className="fw-bold m-0">Analitik Bisnis (BI)</h3>
             </div>
             <div className="row g-4">
                 <div className="col-lg-4 col-md-5">
                     <div className="mb-3">
-                        <span className="badge bg-secondary mb-2">4.2.4 Sales Summary</span>
+                        <span className="badge bg-secondary mb-2">Sales Summary</span>
                         <div className="stat-card bi-card shadow-sm mb-3">
                             <small className="text-muted">Total Pendapatan</small>
                             <div className="h4 fw-bold">{formatRupiah(biData.ringkasan.penjualan)}</div>
@@ -31,7 +30,7 @@ function BiAnalytics() {
                         </div>
                     </div>
                     <div className="mb-3">
-                        <span className="badge bg-primary mb-2">4.2.1 Profit & Loss Tracking</span>
+                        <span className="badge bg-primary mb-2">Profit & Loss Tracking</span>
                         <div className="stat-card bi-card shadow-sm mb-3">
                             <small className="text-muted">Laba Bersih (P&L)</small>
                             <div className="h4 fw-bold text-success">{formatRupiah(biData.ringkasan.laba)}</div>
@@ -58,7 +57,7 @@ function BiAnalytics() {
 
                     {view === 'list' ? (
                         <div className="card border-0 shadow-sm p-4">
-                            <h5 className="fw-bold mb-4"><span className="badge bg-success me-2">4.2.2</span>Performa Penjualan Barang</h5>
+                                <h5 className="fw-bold mb-4"><span className="badge bg-success me-2">Top</span>Performa Penjualan Barang</h5>
                             <div className="table-responsive">
                                 <table className="table table-borderless align-middle">
                                     <thead className="bg-light">
@@ -83,7 +82,7 @@ function BiAnalytics() {
                     ) : (
                         <div className="card border-0 shadow-sm p-4">
                             <div className="d-flex justify-content-between mb-4">
-                                <h5 className="fw-bold"><span className="badge bg-info me-2">4.2.3</span>Tren Penjualan & Laba</h5>
+                                <h5 className="fw-bold"><span className="badge bg-info me-2">Tren</span>Tren Penjualan & Laba</h5>
                                 <select className="form-select form-select-sm w-auto" value={period} onChange={(event) => setPeriod(event.target.value)}>
                                     <option value="monthly">Tren Bulanan</option>
                                     <option value="daily">Tren Harian (April)</option>

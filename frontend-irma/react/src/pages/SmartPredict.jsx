@@ -8,11 +8,11 @@ function SmartPredict() {
 
     return (
         <>
-            <h3 className="fw-bold mb-4">4.3 Fitur Pintar</h3>
+            <h3 className="fw-bold mb-4">Fitur Pintar</h3>
             <div className="row g-4">
                 <div className="col-md-5 d-flex">
                     <div className="simple-card shadow-sm flex-fill d-flex flex-column justify-content-center">
-                        <div className="text-muted small text-uppercase fw-bold mb-2">4.3.2 Sales Forecasting (Mei)</div>
+                        <div className="text-muted small text-uppercase fw-bold mb-2">Sales Forecasting (Mei)</div>
                         <div className="h2 fw-bold mb-2">{formatRupiah(forecast)}</div>
                         <div className="small text-secondary">Perkiraan pendapatan untuk bulan Mei.</div>
                     </div>

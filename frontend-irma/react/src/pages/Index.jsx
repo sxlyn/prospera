@@ -34,13 +34,12 @@ function Index() {
         <>
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h3 className="fw-bold m-0">Laporan Analisis Bisnis</h3>
-                <div className="text-muted small">Data diperbarui secara real-time</div>
             </div>
             <div className="row g-4">
                 <div className="col-lg-4 col-md-5">
                     <div className="mb-3">
                         <div className="d-flex justify-content-between align-items-center mb-2">
-                            <span className="badge bg-secondary">4.2.4 Sales Summary</span>
+                        <span className="badge bg-secondary">Sales Summary</span>
                             <button className="btn btn-sm btn-outline-primary px-3 fw-semibold" type="button" data-bs-toggle="modal" data-bs-target="#ModalExport">
                                 <i className="fas fa-file-export me-1" />Export
                             </button>
@@ -55,7 +54,7 @@ function Index() {
                         </div>
                     </div>
                     <div className="mb-3">
-                        <span className="badge bg-primary mb-2">4.2.1 Profit & Loss Tracking</span>
+                        <span className="badge bg-primary mb-2">Profit & Loss Tracking</span>
                         <div className="clean-card shadow-sm border-start border-success border-4 mb-3">
                             <div className="text-muted small mb-1">Laba Bersih</div>
                             <div className="h4 fw-bold text-success">{formatRupiah(totalProfit)}</div>
@@ -79,14 +78,14 @@ function Index() {
                             </button>
                         </li>
                         <li className="nav-item ms-auto">
-                            <span className="badge bg-warning text-dark p-2 mt-1">4.3.2 Prediksi Aktif</span>
+                            <span className="badge bg-warning text-dark p-2 mt-1">Prediksi Aktif</span>
                         </li>
                     </ul>
 
                     {view === 'overview' ? (
                         <>
                             <div className="clean-card shadow-sm">
-                                <h6 className="fw-bold mb-4"><span className="badge bg-success me-2">4.2.2</span>Top Performance Produk</h6>
+                                <h6 className="fw-bold mb-4"><span className="badge bg-success me-2">Top</span>Top Performance Produk</h6>
                                 <div className="table-responsive">
                                     <table className="table table-simple align-middle">
                                         <thead>
@@ -136,7 +135,7 @@ function Index() {
                     ) : (
                         <div className="clean-card shadow-sm">
                             <div className="d-flex justify-content-between align-items-center mb-4">
-                                <h6 className="fw-bold m-0"><span className="badge bg-info me-2">4.2.3</span>Tren Bisnis</h6>
+                                <h6 className="fw-bold m-0"><span className="badge bg-info me-2">Tren</span>Tren Bisnis</h6>
                                 <div className="btn-group btn-group-sm">
                                     <button className={`btn btn-outline-secondary ${period === 'monthly' ? 'active' : ''}`} type="button" onClick={() => setPeriod('monthly')}>Bulanan</button>
                                     <button className={`btn btn-outline-secondary ${period === 'daily' ? 'active' : ''}`} type="button" onClick={() => setPeriod('daily')}>Harian</button>
