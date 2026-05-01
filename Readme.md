@@ -15,7 +15,7 @@ sudah menyertakan `node_modules` dan file konfigurasi `.env`, sehingga Anda bisa
 
 buka **dua terminal** secara bersamaan (satu untuk Backend, satu untuk Frontend).
 
-### Bagian A: Setup Database & Backend
+### Setup Database & Back-end
 1. Buat database baru di MySQL menggunakan file `db.sql` yang telah disediakan, atau jalankan perintah berikut di phpMyAdmin / MySQL CLI:
    `CREATE DATABASE prospera;`
    `CREATE DATABASE prospera_db;`
@@ -27,7 +27,7 @@ buka **dua terminal** secara bersamaan (satu untuk Backend, satu untuk Frontend)
    `npm run dev`
    *(Server akan berjalan di port 5000. Biarkan terminal ini tetap aktif).*
 
-### Bagian B: Setup Tampilan (Frontend)
+### Setup Front-end
 1. Buka terminal kedua, arahkan ke direktori frontend
 2. Jalankan antarmuka aplikasi:
    `npm run dev`
