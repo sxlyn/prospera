@@ -10,26 +10,28 @@
 *   **** – NIM
 ---
 
-## Panduan Setup (Instalasi & Menjalankan Server)
+## Panduan Setup (Instalasi & Menjalankan Aplikasi)
+sudah menyertakan `node_modules` dan file konfigurasi `.env`, sehingga Anda bisa langsung menjalankannya tanpa perlu menginstal dependensi tambahan. Pastikan **Node.js** dan **MySQL** sudah terinstal dan aktif.
 
-Pastikan **Node.js** dan **MySQL** sudah terinstal dan database lokal sudah dalam keadaan aktif sebelum memulai.
+buka **dua terminal** secara bersamaan (satu untuk Backend, satu untuk Frontend).
 
-1. Lakukan `npm install` pada terminal untuk mengunduh dan menginstal seluruh dependensi (*library*) pendukung yang dibutuhkan oleh proyek ini agar sistem dapat beroperasi dengan baik. Daftar *library* utama yang digunakan meliputi: `bcryptjs`, `cors`, `dotenv`, `exceljs`, `express`, `jsonwebtoken`, `mysql2`, `sequelize`, serta alat *development* `nodemon` dan `sequelize-cli`.
-2. Buat file `.env` di direktori utama (*root*) proyek dan salin konfigurasi di bawah ini untuk menyambungkan aplikasi *backend* dengan database MySQL lokal Anda:
-   ```env
-   # Konfigurasi Database Lokal 
-   DB_HOST=localhost
-   DB_USER=root
-   DB_PASSWORD=
-   DB_NAME=prospera_db
-   DB_PORT=3306
-   JWT_SECRET=rahasia_123_jwt
-   PORT=5000
-   ```
-3. Buat database baru di MySQL (misalnya melalui phpMyAdmin) dengan nama `prospera_db` sesuai dengan yang ditulis di file `.env`. Anda juga bisa melakukannya via terminal dengan perintah `npx sequelize-cli db:create`.
-4. Lakukan perintah `npx sequelize-cli db:migrate` pada terminal untuk mengeksekusi skrip migrasi agar struktur tabel di database terbentuk secara otomatis.
-5. Lakukan perintah `npx sequelize-cli db:seed:all` pada terminal untuk menyuntikkan data awal ke dalam database, termasuk akun user, data produk, dan 100 data transaksi untuk keperluan pengujian analitik.
-6. Lakukan perintah `npm run dev` pada terminal untuk menghidupkan server aplikasi. Jika konfigurasi benar, terminal akan menampilkan pesan bahwa server telah berjalan di *port* 5000.
+### Bagian A: Setup Database & Backend
+1. Buat database baru di MySQL menggunakan file `db.sql` yang telah disediakan, atau jalankan perintah berikut di phpMyAdmin / MySQL CLI:
+   `CREATE DATABASE prospera;`
+   `CREATE DATABASE prospera_db;`
+2. Lakukan migrasi tabel database dengan perintah:
+   `npx sequelize-cli db:migrate`
+3. Suntikkan data awal dengan perintah:
+   `npx sequelize-cli db:seed:all`
+4. Jalankan server backend:
+   `npm run dev`
+   *(Server akan berjalan di port 5000. Biarkan terminal ini tetap aktif).*
+
+### Bagian B: Setup Tampilan (Frontend)
+1. Buka terminal kedua, arahkan ke direktori frontend
+2. Jalankan antarmuka aplikasi:
+   `npm run dev`
+3. Terminal akan menampilkan link lokal (umumnya `http://localhost:5173`). Klik link tersebut untuk membuka aplikasi Prospera.
 
 ## Struktur Proyek
 
