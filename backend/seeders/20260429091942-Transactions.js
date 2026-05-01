@@ -70,6 +70,26 @@ module.exports = {
       currentTransactionId++;
     }
 
+    const outlierDate = "2026-04-27 10:00:00"; 
+    
+    transactionDetailsData.push({
+      transaction_id_fk: currentTransactionId,
+      product_id_fk: 4, 
+      quantity: 150, 
+      capital_cost: 45000,
+      selling_price: 55000,  
+      sub_total: 55000 * 150 
+    });
+
+    transactionsData.push({
+      user_id_fk: 1, 
+      total_amount: 8250000, 
+      status: 'success', 
+      transaction_datetime: outlierDate
+    });
+    
+    currentTransactionId++;
+
     await queryInterface.bulkInsert('Transactions', transactionsData, {});
     await queryInterface.bulkInsert('Transaction_details', transactionDetailsData, {});
   },
