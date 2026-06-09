@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatRupiah } from '../../utils/format';
 
 export default function TransactionDetailModal({
   showTransactionModal, selectedTransaction, closeTransactionModal, getTransactionTypeLabel
@@ -17,7 +18,7 @@ export default function TransactionDetailModal({
         </div>
 
         <div style={{ marginBottom: "16px" }}>
-          <strong>Total:</strong> Rp{selectedTransaction.total_amount} • <strong>Tipe:</strong> {getTransactionTypeLabel(selectedTransaction)}
+          <strong>Total:</strong> {formatRupiah(selectedTransaction.total_amount)} • <strong>Tipe:</strong> {getTransactionTypeLabel(selectedTransaction)}
         </div>
 
         <div style={{ overflowX: "auto" }}>
@@ -38,9 +39,9 @@ export default function TransactionDetailModal({
                   <td style={{ padding: "10px" }}>{item.Product?.product_name || "-"}</td>
                   <td style={{ padding: "10px" }}>{item.transaction_type?.toUpperCase() || "-"}</td>
                   <td style={{ padding: "10px" }}>{item.quantity}</td>
-                  <td style={{ padding: "10px" }}>Rp{item.capital_cost}</td>
-                  <td style={{ padding: "10px" }}>Rp{item.selling_price}</td>
-                  <td style={{ padding: "10px" }}>Rp{item.sub_total}</td>
+                  <td style={{ padding: "10px" }}>{formatRupiah(item.capital_cost)}</td>
+                  <td style={{ padding: "10px" }}>{formatRupiah(item.selling_price)}</td>
+                  <td style={{ padding: "10px", fontWeight: "600" }}>{formatRupiah(item.sub_total)}</td>
                 </tr>
               ))}
             </tbody>

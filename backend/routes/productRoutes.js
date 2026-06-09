@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 
 // Import Middleware
-const verifyToken = require('../middleware/authMiddleware'); 
+const verifyToken = require('../middleware/authMiddleware');
+const authorizeRole = require('../middleware/authorizeRole');
+const { validateProduct, validateIdParam } = require('../middleware/validationMiddleware');
 
-// Import semua fungsi dari controller
+// Import semua fungsi dari Controller
 const { 
     getAllProducts, 
     getProductById,
@@ -13,11 +15,11 @@ const {
     deleteProduct 
 } = require('../controllers/productController');
 
-// Daftar rute produk
-router.get('/', verifyToken, getAllProducts);          // Rute ambil semua produk
-router.get('/:id', verifyToken, getProductById);       // Rute ambil 1 produk secara spesifik
-router.post('/', verifyToken, createProduct);          // Rute tambah produk baru
-router.put('/:id', verifyToken, updateProduct);        // Rute edit/perbarui produk
-router.delete('/:id', verifyToken, deleteProduct);     // Rute hapus produk
+// Daftar rute produk (dilindungi JWT + RBAC + validasi input)
+router.get('/', verifyToken, getAllProducts);                                                              // Semua role bisa lihat
+router.get('/:id', verifyToken, validateIdParam, getProductById);                                          // Semua role bisa lihat
+router.post('/', verifyToken, authorizeRole('owner'), validateProduct, createProduct);                      // Owner only
+router.put('/:id', verifyToken, authorizeRole('owner'), validateIdParam, validateProduct, updateProduct);   // Owner only
+router.delete('/:id', verifyToken, authorizeRole('owner'), validateIdParam, deleteProduct);                 // Owner only
 
 module.exports = router;

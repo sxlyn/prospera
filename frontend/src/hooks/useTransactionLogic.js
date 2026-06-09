@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { authFetch } from "../utils/api";
-import { getTransactionTypeLabel } from "../utils/transactionHelpers"; // Import fungsi helper
+import { apiFetch, formatError } from "../utils/api";
+import { getTransactionTypeLabel } from "../utils/transactionHelpers";
 
 export function useTransactionLogic() {
   const [products, setProducts] = useState([]);
@@ -18,7 +18,7 @@ export function useTransactionLogic() {
   const [messageType, setMessageType] = useState("warning"); 
   const [fetchError, setFetchError] = useState(null); 
   
-  // State baru untuk nyimpen struk terakhir
+  // State untuk menyimpan struk terakhir
   const [lastTransaction, setLastTransaction] = useState(null); 
   
   const [loading, setLoading] = useState(false);
@@ -39,18 +39,25 @@ export function useTransactionLogic() {
 
   const fetchProducts = async () => {
     try {
-      const data = await authFetch("/products");
-      setProducts(Array.isArray(data) ? data : []);
+      const data = await apiFetch("/products");
+      // Use fallback if paginated format, since products dropdown doesn't need pagination here yet
+      setProducts(data.products ? data.products : (Array.isArray(data) ? data : []));
     } catch (error) {
-      setFetchError(error.message); 
+      setFetchError(formatError(error)); 
     }
   };
 
-  const fetchHistory = async (type = dateFilterType, start = customStartDate, end = customEndDate) => {
+  // Pagination State for History
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotalPages, setHistoryTotalPages] = useState(1);
+  const [historyTotalItems, setHistoryTotalItems] = useState(0);
+  const historyLimit = 10;
+
+  const fetchHistory = async (type = dateFilterType, start = customStartDate, end = customEndDate, page = 1) => {
     setLoading(true);
     try {
       let url = "/transactions/history";
-      let queryParams = [];
+      let queryParams = [`page=${page}`, `limit=${historyLimit}`];
       const today = new Date();
 
       if (type === "TODAY") {
@@ -73,10 +80,17 @@ export function useTransactionLogic() {
         url += `?${queryParams.join('&')}`;
       }
 
-      const data = await authFetch(url);
-      setHistory(Array.isArray(data) ? data : []);
+      const data = await apiFetch(url);
+      if (data.transactions) {
+        setHistory(data.transactions);
+        setHistoryPage(data.currentPage);
+        setHistoryTotalPages(data.totalPages);
+        setHistoryTotalItems(data.totalItems);
+      } else {
+        setHistory(Array.isArray(data) ? data : []);
+      }
     } catch (error) {
-      setFetchError(error.message); 
+      setFetchError(formatError(error));
     } finally {
       setLoading(false);
     }
@@ -107,13 +121,15 @@ export function useTransactionLogic() {
     setDateFilterType(type);
     if (type !== "CUSTOM") {
       setIsDateMenuOpen(false);
-      fetchHistory(type, "", "");
+      setHistoryPage(1);
+      fetchHistory(type, "", "", 1);
     }
   };
 
   const applyCustomDate = () => {
     setIsDateMenuOpen(false);
-    fetchHistory("CUSTOM", customStartDate, customEndDate);
+    setHistoryPage(1);
+    fetchHistory("CUSTOM", customStartDate, customEndDate, 1);
   };
 
   const addItem = () => {
@@ -123,21 +139,21 @@ export function useTransactionLogic() {
       return;
     }
     const qty = Number(quantity);
-    if (!qty || qty <= 0) {
-      setMessage("Masukkan jumlah barang (Quantity) minimal 1 unit.");
+    if (!qty || qty <= 0 || !Number.isInteger(qty)) {
+      setMessage("Masukkan jumlah barang (Quantity) minimal 1 unit (bilangan bulat).");
       setMessageType("warning");
       return;
     }
     const mod = Number(modal);
-    if (!mod || mod <= 0) {
-      setMessage("Pastikan nominal modal terisi dengan benar (lebih dari 0).");
+    if (isNaN(mod) || mod < 0) {
+      setMessage("Pastikan nominal modal terisi dengan benar (angka non-negatif).");
       setMessageType("warning");
       return;
     }
     const isSell = transactionType === "sell";
     const harga = Number(hargaJual || mod);
-    if (isSell && (!harga || harga <= 0)) {
-      setMessage("Pastikan nominal harga jual terisi dengan benar (lebih dari 0).");
+    if (isSell && (isNaN(harga) || harga < 0)) {
+      setMessage("Pastikan nominal harga jual terisi dengan benar (angka non-negatif).");
       setMessageType("warning");
       return;
     }
@@ -183,8 +199,14 @@ export function useTransactionLogic() {
     setShowTransactionModal(false);
   };
 
+  // FIX: Hitung total berdasarkan tipe transaksi (selaras dengan backend)
   const totalAmount = useMemo(() => {
-    return cartItems.reduce((sum, item) => sum + item.hargaJual * item.quantity, 0);
+    return cartItems.reduce((sum, item) => {
+      const itemTotal = item.transactionType === 'buy'
+        ? item.modal * item.quantity      // Pembelian: pakai harga modal
+        : item.hargaJual * item.quantity;  // Penjualan: pakai harga jual
+      return sum + itemTotal;
+    }, 0);
   }, [cartItems]);
 
   const saveTransaction = async () => {
@@ -209,12 +231,12 @@ export function useTransactionLogic() {
         }))
       };
 
-      const response = await authFetch("/transactions/checkout", {
+      const response = await apiFetch("/transactions/checkout", {
         method: "POST",
         body: JSON.stringify(payload)
       });
 
-      // SIMPAN DATA STRUK SEBELUM KERANJANG DIKOSONGKAN
+      // Simpan data struk sebelum keranjang dikosongkan
       setLastTransaction({
         items: [...cartItems],
         total: totalAmount,
@@ -228,8 +250,8 @@ export function useTransactionLogic() {
       fetchProducts();
       fetchHistory(); 
     } catch (error) {
-      setMessage(`Gagal menyimpan transaksi: ${error.message}. Silakan periksa kembali.`); 
-      setMessageType("warning");
+      setMessageType("danger");
+      setMessage(formatError(error));
     } finally {
       setSaving(false);
     }
@@ -251,13 +273,14 @@ export function useTransactionLogic() {
     cartItems, setCartItems, selectedProductId, setSelectedProductId,
     transactionType, setTransactionType, quantity, setQuantity,
     modal, setModal, hargaJual, setHargaJual, datetime, setDatetime,
-    message, messageType, fetchError, loading, saving, lastTransaction, // <-- lastTransaction ditambahkan
+    message, messageType, fetchError, loading, saving, lastTransaction,
     searchTerm, setSearchTerm, isDropdownOpen, setIsDropdownOpen,
     selectedTransaction, showTransactionModal, activeTab, setActiveTab,
     dateFilterType, customStartDate, setCustomStartDate,
     customEndDate, setCustomEndDate, isDateMenuOpen, setIsDateMenuOpen,
     historySearchTerm, setHistorySearchTerm,
     filteredProducts, filteredHistory, totalAmount,
+    historyPage, historyTotalPages, historyTotalItems, fetchHistory,
     handleDateFilterChange, applyCustomDate, addItem, removeItem,
     getTransactionTypeLabel, openTransactionModal, closeTransactionModal, saveTransaction
   };

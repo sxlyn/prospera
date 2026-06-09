@@ -1,22 +1,18 @@
 import { useState } from 'react';
+import { apiFetchBlob, formatError } from '../utils/api';
 
 function ModalExport() {
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
 
     const handleExport = async (format) => {
         try {
             setLoading(true);
-            const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:5000/api/analytics/summary/export/${format}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            setError("");
 
-            if (!response.ok) throw new Error('Gagal mengekspor data');
-
-            const blob = await response.blob();
+            // Menggunakan apiFetchBlob terpusat (bukan hardcoded URL)
+            const blob = await apiFetchBlob(`/analytics/summary/export/${format}`);
+            
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -25,8 +21,8 @@ function ModalExport() {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-        } catch (error) {
-            alert('Error: ' + error.message);
+        } catch (err) {
+            setError(formatError(err));
         } finally {
             setLoading(false);
         }
@@ -41,6 +37,11 @@ function ModalExport() {
                         <button type="button" className="btn-close" data-bs-dismiss="modal" aria-label="Tutup" />
                     </div>
                     <div className="modal-body">
+                        {error && (
+                            <div className="alert alert-danger py-2 mb-3" role="alert">
+                                <i className="fas fa-exclamation-circle me-2"></i>{error}
+                            </div>
+                        )}
                         <div className="d-grid gap-3">
                             <button 
                                 type="button" 

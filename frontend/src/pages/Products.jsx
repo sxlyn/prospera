@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import Dashboard from "../components/Dashboard";
-import { authFetch } from "../utils/api";
+import { apiFetch, getUserRole, formatError } from "../utils/api";
+import { formatRupiah } from "../utils/format";
 
 export default function Products() {
+  const role = getUserRole();
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState(""); 
   const [recentlyAdded, setRecentlyAdded] = useState(null);
@@ -14,12 +15,29 @@ export default function Products() {
   const [price, setPrice] = useState("");
   const [stock, setStock] = useState("");
 
-  const fetchProducts = async () => {
+  // BEST PRACTICE: State Loading untuk mencegah Double Submit
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const limit = 10; // 10 items per page
+
+  const fetchProducts = async (page = 1) => {
     try {
-      const data = await authFetch("/products");
-      setProducts(Array.isArray(data) ? data : []);
+      const data = await apiFetch(`/products?page=${page}&limit=${limit}`);
+      if (data.products) {
+        setProducts(data.products);
+        setTotalPages(data.totalPages);
+        setTotalItems(data.totalItems);
+        setCurrentPage(data.currentPage);
+      } else {
+        // Fallback for old API format
+        setProducts(Array.isArray(data) ? data : []);
+      }
     } catch (error) {
-      console.error("Gagal load data produk:", error);
+      setMessage(formatError(error));
     }
   };
 
@@ -32,10 +50,24 @@ export default function Products() {
   const saveProduct = async (e) => {
     e.preventDefault();
 
-    if (!name || !cost || !price || !stock) {
-      setMessage("Semua field harus diisi.");
+    // BEST PRACTICE: Pengecekan Eksplisit (angka 0 dianggap sah)
+    if (name.trim() === "" || cost === "" || price === "" || stock === "") {
+      setMessage("Semua field harus diisi (angka 0 diperbolehkan).");
       return;
     }
+
+    if (Number(cost) < 0 || Number(price) < 0 || Number(stock) < 0) {
+      setMessage("Harga dan stok tidak boleh negatif.");
+      return;
+    }
+
+    if (!Number.isInteger(Number(stock))) {
+      setMessage("Stok harus berupa bilangan bulat.");
+      return;
+    }
+
+    setIsSubmitting(true); // Kunci tombol saat mulai nge-hit API
+    setMessage("");
 
     const payload = {
       product_name: name,
@@ -46,13 +78,13 @@ export default function Products() {
 
     try {
       if (selectedProduct) {
-        await authFetch(`/products/${selectedProduct}`, {
+        await apiFetch(`/products/${selectedProduct}`, {
           method: "PUT",
           body: JSON.stringify(payload)
         });
         setMessage("Produk berhasil diperbarui.");
       } else {
-        await authFetch("/products", {
+        await apiFetch("/products", {
           method: "POST",
           body: JSON.stringify(payload)
         });
@@ -67,8 +99,9 @@ export default function Products() {
       setSelectedProduct(null);
       fetchProducts();
     } catch (err) {
-      console.log("Error:", err);
-      setMessage(`Gagal: ${err.message}`);
+      setMessage(formatError(err));
+    } finally {
+      setIsSubmitting(false); // Buka kunci tombol kembali setelah selesai
     }
   };
 
@@ -79,22 +112,21 @@ export default function Products() {
     setPrice(product.product_price ?? "");
     setStock(product.product_stock ?? "");
     setMessage("");
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // UX: Gulir ke atas
   };
 
   const deleteProduct = async (productId) => {
-    if (!window.confirm("Yakin ingin menghapus produk ini?")) return;
+    if (!window.confirm("Yakin ingin menghapus produk ini? Riwayat penjualan yang terkait mungkin terdampak.")) return;
 
     try {
-      await authFetch(`/products/${productId}`, { method: "DELETE" });
+      await apiFetch(`/products/${productId}`, { method: "DELETE" });
       setMessage("Produk berhasil dihapus.");
       fetchProducts();
     } catch (err) {
-      console.log("Error:", err);
-      setMessage(`Gagal: ${err.message}`);
+      setMessage(formatError(err));
     }
   };
 
-  // LOGIKA FILTER: Bisa cari berdasarkan Nama (product_name) ATAU ID (product_id)
   const filteredProducts = products.filter(p => {
     const nameMatch = (p.product_name || "").toLowerCase().includes(searchTerm.toLowerCase());
     const idMatch = String(p.product_id || p.id).includes(searchTerm);
@@ -122,17 +154,28 @@ export default function Products() {
         )}
         {/* --------------------------- */}
 
+        {/* Form produk tersedia untuk Owner dan Karyawan */}
+        {(role === 'owner' || role === 'karyawan') && (
         <div className="card">
           <h3>{selectedProduct ? "Edit Product" : "Add Product"}</h3>
           <div className="form-row" style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
             <input className="input" placeholder="Product name" style={{ flex: "1 1 45%" }} value={name} onChange={(e) => setName(e.target.value)} />
-            <input className="input" placeholder="Cost (Modal)" type="number" style={{ flex: "1 1 45%" }} value={cost} onChange={(e) => setCost(e.target.value)} />
-            <input className="input" placeholder="Price (Harga Jual)" type="number" style={{ flex: "1 1 45%" }} value={price} onChange={(e) => setPrice(e.target.value)} />
-            <input className="input" placeholder="Stock" type="number" style={{ flex: "1 1 45%" }} value={stock} onChange={(e) => setStock(e.target.value)} />
-            <button type="button" className="button" onClick={saveProduct} style={{ flex: "1 1 100%", marginTop: "5px" }}>
-              {selectedProduct ? "Update Product" : "Add Product"}
+            <input className="input" placeholder="Cost (Modal)" type="number" min="0" style={{ flex: "1 1 45%" }} value={cost} onChange={(e) => setCost(e.target.value)} />
+            <input className="input" placeholder="Price (Harga Jual)" type="number" min="0" style={{ flex: "1 1 45%" }} value={price} onChange={(e) => setPrice(e.target.value)} />
+            <input className="input" placeholder="Stock" type="number" min="0" style={{ flex: "1 1 45%" }} value={stock} onChange={(e) => setStock(e.target.value)} />
+            
+            {/* BEST PRACTICE: Visual Feedback & Button Lock */}
+            <button 
+              type="button" 
+              className="button" 
+              onClick={saveProduct} 
+              disabled={isSubmitting}
+              style={{ flex: "1 1 100%", marginTop: "5px", opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? "not-allowed" : "pointer" }}
+            >
+              {isSubmitting ? "Menyimpan..." : (selectedProduct ? "Update Product" : "Add Product")}
             </button>
-            {selectedProduct && (
+
+            {selectedProduct && !isSubmitting && (
               <button type="button" className="button" style={{ flex: "1 1 100%", marginTop: "5px", background: "#6B7280" }} onClick={() => {
                 setSelectedProduct(null);
                 setName("");
@@ -146,6 +189,7 @@ export default function Products() {
             )}
           </div>
         </div>
+        )}
 
         {recentlyAdded && (
           <div className="card" style={{ border: "2px solid #4caf50", backgroundColor: "#f1f8e9" }}>
@@ -179,12 +223,17 @@ export default function Products() {
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
                         <small style={{ color: "gray" }}>ID: {p.product_id || p.id}</small>
-                        <span className={(p.product_stock || p.stock) < 10 ? "badge low" : "badge safe"} style={{ padding: "2px 8px", fontSize: "10px" }}>
-                          {(p.product_stock || p.stock) < 10 ? "Low" : "Safe"}
+                        
+                        {/* --- SINGLE SOURCE OF TRUTH APPLIED HERE --- */}
+                        <span className={p.stock_status === "Low Stock" ? "badge low" : "badge safe"} style={{ padding: "2px 8px", fontSize: "10px" }}>
+                          {p.stock_status || "Safe"}
                         </span>
+                        {/* ------------------------------------------- */}
+                        
                       </div>
                       <b>{p.product_name || p.name}</b>
                     </div>
+                    {(role === 'owner' || role === 'karyawan') && (
                     <div>
                       <button className="button" style={{ marginRight: "8px" }} onClick={() => editProduct(p)}>
                         Edit
@@ -193,9 +242,11 @@ export default function Products() {
                         Delete
                       </button>
                     </div>
+                    )}
                   </div>
                   <div className="stock" style={{ marginTop: "8px" }}>
-                    Modal: Rp{p.product_cost} | Jual: Rp{p.product_price} | Stok: {p.product_stock}
+                    {/* BEST PRACTICE: Format Rupiah */}
+                    Modal: {formatRupiah(p.product_cost)} | Jual: <span style={{color: "#059669", fontWeight: "bold"}}>{formatRupiah(p.product_price)}</span> | Stok: {p.product_stock}
                   </div>
                 </div>
               </div>
@@ -204,6 +255,33 @@ export default function Products() {
             <p style={{ textAlign: "center", color: "gray" }}>
               {searchTerm ? "Produk tidak ditemukan." : "Belum ada produk di database."}
             </p>
+          )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && !searchTerm && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", borderTop: "1px solid #e5e7eb", paddingTop: "15px" }}>
+              <span style={{ fontSize: "14px", color: "gray" }}>
+                Menampilkan halaman {currentPage} dari {totalPages} ({totalItems} produk)
+              </span>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button 
+                  className="btn btn-outline-primary btn-sm" 
+                  disabled={currentPage === 1}
+                  onClick={() => fetchProducts(currentPage - 1)}
+                  style={{ borderRadius: "6px", padding: "5px 12px" }}
+                >
+                  <i className="fas fa-chevron-left me-1"></i> Prev
+                </button>
+                <button 
+                  className="btn btn-outline-primary btn-sm" 
+                  disabled={currentPage === totalPages}
+                  onClick={() => fetchProducts(currentPage + 1)}
+                  style={{ borderRadius: "6px", padding: "5px 12px" }}
+                >
+                  Next <i className="fas fa-chevron-right ms-1"></i>
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

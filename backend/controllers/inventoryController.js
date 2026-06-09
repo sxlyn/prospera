@@ -1,12 +1,13 @@
 const { Product } = require('../models');
 const { Op } = require('sequelize');
+const { CRITICAL_THRESHOLD } = require('../utils/stockHelper');
 
-const getLowStock = async (req, res) => {
+const getLowStock = async (req, res, next) => {
     try {
-        console.log(req.user);
+        const userId = req.user.store_id;
 
-        const userId = req.user.id || req.user.user_id;
-        const stockLimit = req.query.limit || 25;
+        // SINGLE SOURCE OF TRUTH: Selalu gunakan standar backend (CRITICAL_THRESHOLD)
+        const stockLimit = CRITICAL_THRESHOLD; 
 
         const products = await Product.findAll({
             where: {
@@ -27,8 +28,7 @@ const getLowStock = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Terjadi kesalahan internal pada server." });
+        next(error);
     }
 };
 

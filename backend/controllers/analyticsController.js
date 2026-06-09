@@ -3,10 +3,10 @@ const { Op, fn, col, literal } = require("sequelize");
 const { getDateFilter } = require("../utils/dateUtils"); 
 
 // 1. SUMMARY 
-const getSummary = async (req, res) => {
+const getSummary = async (req, res, next) => {
     try {
         const { startDate, endDate } = req.query;
-        const userId = req.user.id;
+        const userId = req.user.store_id;
 
         const statusData = await Transaction.findAll({
             where: { ...getDateFilter(startDate, endDate), user_id_fk: userId },
@@ -86,7 +86,7 @@ const getSummary = async (req, res) => {
                 [fn("SUM", literal("quantity * selling_price")), "subtotal"]
             ],
             include: [
-                { model: Product, attributes: ["product_name"], required: true },
+                { model: Product, attributes: ["product_name"], required: true, paranoid: false },
                 { model: Transaction, attributes: [], where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' } }
             ],
             group: ["Product.product_id", "Product.product_name"],
@@ -106,16 +106,15 @@ const getSummary = async (req, res) => {
             details: formattedDetails
         });
     } catch (error) {
-        console.error("Error di getSummary:", error);
-        res.status(500).json({ message: "Terjadi kesalahan internal saat mengambil summary." });
+        next(error);
     }
 };
 
 // 2. PROFIT & LOSS
-const getProfit = async (req, res) => {
+const getProfit = async (req, res, next) => {
     try {
         const { startDate, endDate } = req.query;
-        const userId = req.user.id;
+        const userId = req.user.store_id;
 
         const result = await TransactionDetail.findAll({
             include: [{
@@ -140,15 +139,15 @@ const getProfit = async (req, res) => {
 
         res.json({ revenue, total_profit: profit, total_loss: loss, net_income, profit_margin: `${profit_margin}%` });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        next(error);
     }
 };
 
 // 3. TOP PRODUCT
-const getTopProduct = async (req, res) => {
+const getTopProduct = async (req, res, next) => {
     try {
         const { startDate, endDate, limit } = req.query;
-        const userId = req.user.id;
+        const userId = req.user.store_id;
 
         const rows = await TransactionDetail.findAll({
             attributes: [
@@ -157,7 +156,7 @@ const getTopProduct = async (req, res) => {
                 [literal("SUM((selling_price - capital_cost) * quantity)"), "laba"]
             ],
             include: [
-                { model: Product, attributes: ["product_name"], required: true },
+                { model: Product, attributes: ["product_name"], required: true, paranoid: false },
                 { model: Transaction, attributes: [], where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' } }
             ],
             group: ["Product.product_id", "Product.product_name"],
@@ -181,15 +180,15 @@ const getTopProduct = async (req, res) => {
             };
         }));
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        next(error);
     }
 };
 
 // 4. MONTHLY REPORT 
-const getMonthly = async (req, res) => {
+const getMonthly = async (req, res, next) => {
     try {
         const { startDate, endDate } = req.query;
-        const userId = req.user.id;
+        const userId = req.user.store_id;
 
         const rows = await TransactionDetail.findAll({
             include: [{
@@ -216,30 +215,28 @@ const getMonthly = async (req, res) => {
             average_sale: parseInt(item.total_transaction) > 0 ? (parseFloat(item.revenue) / parseInt(item.total_transaction)) : 0
         })));
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        next(error);
     }
 };
 
-// 5. BARANG RUGI (Di-update dengan Modal & Harga Jual per unit)
-const getLossProducts = async (req, res) => {
+// 5. BARANG RUGI
+const getLossProducts = async (req, res, next) => {
     try {
         const { startDate, endDate, limit } = req.query;
-        const userId = req.user.id;
+        const userId = req.user.store_id;
 
         const rows = await TransactionDetail.findAll({
             attributes: [
                 [fn("SUM", col("quantity")), "sold"],
-                // --- BAGIAN YANG DIPERBAIKI ---
                 [fn("MAX", col("capital_cost")), "modal"], 
                 [fn("MAX", col("selling_price")), "harga_jual"], 
-                // ------------------------------
                 [literal("SUM((capital_cost - selling_price) * quantity)"), "rugi"]
             ],
             include: [
-                { model: Product, attributes: ["product_name"], required: true },
+                { model: Product, attributes: ["product_name"], required: true, paranoid: false },
                 { model: Transaction, attributes: [], where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' } }
             ],
-            where: literal('selling_price < capital_cost'), // Hanya ambil barang yang dijual di bawah modal
+            where: literal('selling_price < capital_cost'),
             group: ["Product.product_id", "Product.product_name"],
             order: [[literal("rugi"), "DESC"]],
             limit: limit ? parseInt(limit) : 5,
@@ -255,8 +252,7 @@ const getLossProducts = async (req, res) => {
             rugi: parseFloat(item.rugi) || 0
         })));
     } catch (error) {
-        console.error("Error di getLossProducts:", error);
-        res.status(500).json({ message: error.message });
+        next(error);
     }
 };
 

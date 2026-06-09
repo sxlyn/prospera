@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatRupiah } from '../../utils/format';
 
 export default function CartTable({
   cartItems, removeItem, setCartItems, saveTransaction, saving, totalAmount
@@ -24,31 +25,38 @@ export default function CartTable({
               </tr>
             </thead>
             <tbody>
-              {cartItems.map((item, index) => (
-                <tr key={`${item.product_id}-${index}`}>
-                  <td style={{ padding: "10px" }}>{item.product_name}</td>
-                  <td style={{ padding: "10px" }}>{item.quantity}</td>
-                  <td style={{ padding: "10px" }}>Rp{item.modal}</td>
-                  <td style={{ padding: "10px" }}>Rp{item.hargaJual}</td>
-                  <td style={{ padding: "10px" }}>
-                    <span className={`badge ${item.transactionType === "buy" ? "safe" : "low"}`} style={{ padding: "2px 8px", fontSize: "12px" }}>
-                      {item.transactionType === "buy" ? "Buy" : "Sell"}
-                    </span>
-                  </td>
-                  <td style={{ padding: "10px" }}>{item.datetime ? new Date(item.datetime).toLocaleString() : "-"}</td>
-                  <td style={{ padding: "10px" }}>Rp{item.hargaJual * item.quantity}</td>
-                  <td style={{ padding: "10px" }}>
-                    <button className="button" style={{ background: "#EF4444", color: "white" }} onClick={() => removeItem(index)}>Hapus</button>
-                  </td>
-                </tr>
-              ))}
+              {cartItems.map((item, index) => {
+                // FIX: Subtotal berdasarkan tipe transaksi (selaras dengan backend)
+                const subtotal = item.transactionType === 'buy'
+                  ? item.modal * item.quantity      // Pembelian: pakai harga modal
+                  : item.hargaJual * item.quantity;  // Penjualan: pakai harga jual
+
+                return (
+                  <tr key={`${item.product_id}-${index}`}>
+                    <td style={{ padding: "10px" }}>{item.product_name}</td>
+                    <td style={{ padding: "10px" }}>{item.quantity}</td>
+                    <td style={{ padding: "10px" }}>{formatRupiah(item.modal)}</td>
+                    <td style={{ padding: "10px" }}>{formatRupiah(item.hargaJual)}</td>
+                    <td style={{ padding: "10px" }}>
+                      <span className={`badge ${item.transactionType === "buy" ? "safe" : "low"}`} style={{ padding: "2px 8px", fontSize: "12px" }}>
+                        {item.transactionType === "buy" ? "Buy" : "Sell"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px" }}>{item.datetime ? new Date(item.datetime).toLocaleString() : "-"}</td>
+                    <td style={{ padding: "10px", fontWeight: "600" }}>{formatRupiah(subtotal)}</td>
+                    <td style={{ padding: "10px" }}>
+                      <button className="button" style={{ background: "#EF4444", color: "white" }} onClick={() => removeItem(index)}>Hapus</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", flexWrap: "wrap", gap: "12px" }}>
-        <div><strong>Total:</strong> Rp{totalAmount}</div>
+        <div><strong>Total:</strong> {formatRupiah(totalAmount)}</div>
         
         <div style={{ display: "flex", gap: "12px" }}>
             <button 

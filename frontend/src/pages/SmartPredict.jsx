@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { apiFetch } from '../utils/api';
+import { apiFetch, formatError } from '../utils/api';
 import { formatRupiah } from '../utils/format';
 import ErrorMessage from '../components/ErrorMessage';
 
@@ -9,20 +9,21 @@ function SmartPredict() {
     const [data, setData] = useState({
         forecast: 0,
         lowStock: [],
-        allProducts: []
+        allProducts: [],
+        safetyStockThreshold: 30 // Nilai default sementara sebelum di-overwrite API
     });
 
     useEffect(() => {
         const fetchData = async () => {
             try {
                 setLoading(true);
+                // SINGLE SOURCE OF TRUTH: Jangan kirim limit dari sini. Biar Backend yang nentuin.
                 const [forecastRes, lowStockRes, productsRes] = await Promise.all([
                     apiFetch('/forecast'),
-                    apiFetch('/inventory/low-stock?limit=25'),
+                    apiFetch('/inventory/low-stock'), // <-- limit=25 dihapus
                     apiFetch('/products')
                 ]);
 
-                // Parse "Rp 123.000" string to number if needed, or use as is
                 const forecastValue = typeof forecastRes.prediction === 'string' 
                     ? parseInt(forecastRes.prediction.replace(/[^0-9]/g, '')) 
                     : forecastRes.prediction;
@@ -30,10 +31,12 @@ function SmartPredict() {
                 setData({
                     forecast: forecastValue,
                     lowStock: lowStockRes.data,
-                    allProducts: productsRes.data || productsRes // Handle different response formats
+                    allProducts: productsRes.products || productsRes.data || productsRes,
+                    // Ambil angka standar (30) dari response backend
+                    safetyStockThreshold: lowStockRes.threshold || 30 
                 });
             } catch (err) {
-                setError(err.message);
+                setError(formatError(err));
             } finally {
                 setLoading(false);
             }
@@ -45,8 +48,9 @@ function SmartPredict() {
     if (loading) return <div className="p-5 text-center"><div className="spinner-border text-primary"></div><p className="mt-2">Memuat fitur pintar...</p></div>;
     if (error) return <ErrorMessage error={error} />;
 
-    const safetyStock = 25;
     const forecast = data.forecast;
+    // Gunakan nilai threshold dari backend untuk menghitung saran restock
+    const safetyStock = data.safetyStockThreshold; 
 
     return (
         <>
@@ -72,7 +76,7 @@ function SmartPredict() {
                                 <div className="text-muted small mb-1">Produk Kritis</div>
                                 <div className="h2 fw-bold text-danger">{data.lowStock.length}</div>
                             </div>
-                            <div className="flex-grow-1 small">
+                            <div className="flex-grow-1 small"style={{ maxHeight: "220px", overflowY: "auto", paddingRight: "10px" }}>
                                 {data.lowStock.length > 0 ? (
                                     data.lowStock.map((item) => (
                                         <div className="alert-item d-flex justify-content-between align-items-center mb-1" key={item.product_id}>
@@ -101,9 +105,12 @@ function SmartPredict() {
                                 </thead>
                                 <tbody>
                                     {(data.allProducts.length > 0 ? data.allProducts : []).map((item) => {
-                                        const needsRestock = item.product_stock < safetyStock;
-                                        const perluDipesan = needsRestock ? safetyStock * 2 - item.product_stock : 0;
-                                        if (perluDipesan === 0) return null;
+                                        // Rumus dinamis mengikuti ambang batas dari backend (misal: 30)
+                                        const needsRestock = item.product_stock <= safetyStock;
+                                        const perluDipesan = needsRestock ? (safetyStock * 2) - item.product_stock : 0;
+                                        
+                                        if (perluDipesan <= 0) return null;
+                                        
                                         return (
                                             <tr key={item.product_id}>
                                                 <td><div className="fw-bold">{item.product_name}</div></td>

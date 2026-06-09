@@ -1,6 +1,16 @@
 const jwt = require('jsonwebtoken');
 
+/**
+ * Middleware Verifikasi Token JWT
+ * Memvalidasi keaslian token dan menyimpan data pengguna ke req.user
+ */
 const verifyToken = (req, res, next) => {
+    // Fail-fast: pastikan JWT_SECRET sudah dikonfigurasi
+    if (!process.env.JWT_SECRET) {
+        console.error('FATAL: JWT_SECRET belum dikonfigurasi di file .env!');
+        return res.status(500).json({ message: "Konfigurasi server tidak lengkap." });
+    }
+
     // 1. Tangkap header "Authorization" dari request
     const authHeader = req.headers['authorization'];
     
@@ -27,6 +37,11 @@ const verifyToken = (req, res, next) => {
         
         // 5. Jika valid, simpan data user (termasuk user_id) ke dalam req.user
         req.user = decoded; 
+        
+        // ISOLASI DATA SaaS: Hitung store_id
+        // Owner = Tokonya sendiri (menggunakan id-nya sendiri)
+        // Karyawan = Toko milik owner-nya (menggunakan owner_id-nya)
+        req.user.store_id = decoded.role === 'owner' ? decoded.id : decoded.owner_id;
         
         // 6. Izinkan masuk ke rute tujuan (Controller)
         next(); 

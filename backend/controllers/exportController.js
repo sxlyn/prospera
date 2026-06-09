@@ -1,13 +1,13 @@
 const { Transaction, TransactionDetail, Product } = require("../models");
 const { fn, col, literal } = require("sequelize");
 const { ExcelReport, CsvReport } = require("../services/reportService");
-const { getDateFilter } = require("../utils/dateUtils"); // <-- Import dari utils
+const { getDateFilter } = require("../utils/dateUtils");
 
 // 1. EXPORT TO EXCEL
-const exportSummaryExcel = async (req, res) => {
+const exportSummaryExcel = async (req, res, next) => {
     try {
         const { startDate, endDate } = req.query;
-        const userId = req.user.id; 
+        const userId = req.user.store_id; 
 
         const statusData = await Transaction.findAll({
             where: { ...getDateFilter(startDate, endDate), user_id_fk: userId },
@@ -51,7 +51,7 @@ const exportSummaryExcel = async (req, res) => {
                 [literal("MAX(selling_price)"), "unit_price"]
             ],
             include: [
-                { model: Product, attributes: ["product_name"], required: true },
+                { model: Product, attributes: ["product_name"], required: true, paranoid: false },
                 { model: Transaction, attributes: [], where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' } }
             ],
             group: ["Product.product_id", "Product.product_name"],
@@ -88,16 +88,15 @@ const exportSummaryExcel = async (req, res) => {
         res.send(fileBuffer);
 
     } catch (error) {
-        console.error("Error Export Excel:", error);
-        res.status(500).json({ message: "Gagal membuat file Excel" });
+        next(error);
     }
 };
 
 // 2. EXPORT CSV
-const exportSummaryCsv = async (req, res) => {
+const exportSummaryCsv = async (req, res, next) => {
     try {
         const { startDate, endDate } = req.query;
-        const userId = req.user.id; 
+        const userId = req.user.store_id; 
 
         const detailsData = await TransactionDetail.findAll({
             attributes: [
@@ -107,7 +106,7 @@ const exportSummaryCsv = async (req, res) => {
                 [literal("MAX(selling_price)"), "unit_price"]
             ],
             include: [
-                { model: Product, attributes: ["product_name"], required: true },
+                { model: Product, attributes: ["product_name"], required: true, paranoid: false },
                 { model: Transaction, attributes: [], where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' } }
             ],
             group: ["Product.product_id", "Product.product_name"],
@@ -139,8 +138,7 @@ const exportSummaryCsv = async (req, res) => {
         res.send(fileBuffer);
 
     } catch (error) {
-        console.error("Error Export CSV:", error);
-        res.status(500).json({ message: "Gagal membuat file CSV" });
+        next(error);
     }
 };
 

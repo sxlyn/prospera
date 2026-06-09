@@ -1,23 +1,44 @@
 const { Product } = require('../models');
+const { getStockStatus } = require('../utils/stockHelper');
 
 // Mengambil seluruh data produk berdasarkan ID pengguna yang sedang masuk.
-const getAllProducts = async (req, res) => {
+const getAllProducts = async (req, res, next) => {
     try {
-        const userId = req.user.id; 
-        const products = await Product.findAll({
-            where: { user_id_fk: userId }
+        const userId = req.user.store_id; 
+        // Default page 1, default limit 1000 untuk backward compatibility jika client belum pakai pagination
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 1000;
+        const offset = (page - 1) * limit;
+
+        const { count, rows } = await Product.findAndCountAll({
+            where: { user_id_fk: userId },
+            limit: limit,
+            offset: offset,
+            order: [['product_id', 'DESC']] 
         });
-        res.status(200).json(products);
+
+        // Terapkan fungsi dari Shared Helper ke setiap produk
+        const productsWithStatus = rows.map(p => {
+            const productData = p.toJSON();
+            productData.stock_status = getStockStatus(productData.product_stock); 
+            return productData;
+        });
+
+        res.status(200).json({
+            totalItems: count,
+            totalPages: Math.ceil(count / limit),
+            currentPage: page,
+            products: productsWithStatus
+        });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Terjadi kesalahan internal pada server." });
+        next(error);
     }
 };
 
-// Mengambil satu data produk spesifik berdasarkan ID produk dan ID pengguna.
-const getProductById = async (req, res) => {
+// Mengambil satu data produk spesifik
+const getProductById = async (req, res, next) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.store_id;
         const productId = req.params.id;
 
         const product = await Product.findOne({
@@ -32,23 +53,17 @@ const getProductById = async (req, res) => {
         }
         res.status(200).json(product);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Terjadi kesalahan internal pada server." });
+        next(error);
     }
 };
 
-// Menambahkan data produk baru ke dalam basis data.
-const createProduct = async (req, res) => {
+// Menambahkan data produk baru
+const createProduct = async (req, res, next) => {
     try {
-        const userId = req.user.id; 
+        const userId = req.user.store_id; 
         const { product_name, product_cost, product_price, product_stock } = req.body;
         
-        // Memvalidasi masukan agar tidak ada data kosong.
-        if (!product_name || product_cost === undefined || product_price === undefined) {
-            return res.status(400).json({ message: "Nama, Harga Modal, dan Harga Jual wajib diisi!" });
-        }
-
-        // --- TAMBAHAN BARU: CEK DUPLIKASI NAMA PRODUK ---
+        // Cek duplikasi nama produk (logika bisnis, tetap di controller)
         const existingProduct = await Product.findOne({
             where: {
                 user_id_fk: userId,
@@ -59,14 +74,13 @@ const createProduct = async (req, res) => {
         if (existingProduct) {
             return res.status(400).json({ message: `Produk dengan nama "${product_name}" sudah ada di toko Anda.` });
         }
-        // ------------------------------------------------
 
         const newProduct = await Product.create({
             user_id_fk: userId,
             product_name: product_name,
             product_cost: product_cost,
             product_price: product_price,
-            product_stock: product_stock || 0
+            product_stock: product_stock
         });
 
         res.status(201).json({ 
@@ -74,24 +88,18 @@ const createProduct = async (req, res) => {
             productId: newProduct.product_id 
         });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Terjadi kesalahan internal pada server." });
+        next(error);
     }
 };
 
-// Memperbarui data produk yang sudah ada berdasarkan ID produk.
-const updateProduct = async (req, res) => {
+// Memperbarui data produk yang sudah ada
+const updateProduct = async (req, res, next) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.store_id;
         const productId = req.params.id;
         const { product_name, product_cost, product_price, product_stock } = req.body;
 
-        // Memvalidasi masukan sebelum proses pembaruan.
-        if (!product_name || product_cost === undefined || product_price === undefined) {
-            return res.status(400).json({ message: "Nama, Harga Modal, dan Harga Jual tidak boleh kosong!" });
-        }
-
-        // --- TAMBAHAN BARU: CEK DUPLIKASI SAAT EDIT ---
+        // Cek duplikasi nama produk (logika bisnis, tetap di controller)
         const duplicateProduct = await Product.findOne({
             where: {
                 user_id_fk: userId,
@@ -99,11 +107,9 @@ const updateProduct = async (req, res) => {
             }
         });
 
-        // Pastikan nama baru tidak bentrok dengan barang lain milik user ini
         if (duplicateProduct && String(duplicateProduct.product_id) !== String(productId)) {
             return res.status(400).json({ message: `Nama "${product_name}" sudah digunakan oleh produk lain di toko Anda.` });
         }
-        // ----------------------------------------------
 
         const [updatedRows] = await Product.update(
             {
@@ -125,15 +131,14 @@ const updateProduct = async (req, res) => {
         }
         res.status(200).json({ message: "Data produk berhasil diperbarui." });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Terjadi kesalahan internal pada server." });
+        next(error);
     }
 };
 
-// Menghapus data produk dari basis data.
-const deleteProduct = async (req, res) => {
+// Menghapus data produk
+const deleteProduct = async (req, res, next) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.store_id;
         const productId = req.params.id;
 
         const deletedRows = await Product.destroy({
@@ -148,8 +153,7 @@ const deleteProduct = async (req, res) => {
         }
         res.status(200).json({ message: "Produk berhasil dihapus." });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Terjadi kesalahan internal pada server." });
+        next(error);
     }
 };
 

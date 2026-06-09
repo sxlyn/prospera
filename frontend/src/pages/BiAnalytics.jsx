@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TrendChart from '../components/TrendChart';
-import { apiFetch } from '../utils/api';
+import { apiFetch, formatError } from '../utils/api';
 import { formatRupiah } from '../utils/format';
 import ErrorMessage from '../components/ErrorMessage';
 function BiAnalytics() {
@@ -55,7 +55,7 @@ function BiAnalytics() {
                     lossProducts: lossProductsRes 
                 });
             } catch (err) {
-                setError(err.message);
+                setError(formatError(err));
             } finally {
                 setLoading(false);
             }

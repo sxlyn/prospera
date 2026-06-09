@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ModalExport from '../components/ModalExport';
 import TrendChart from '../components/TrendChart';
-import { apiFetch } from '../utils/api';
+import { apiFetch, formatError } from '../utils/api';
 import { formatRupiah } from '../utils/format';
 
 function Index() {
@@ -46,7 +46,7 @@ function Index() {
                     monthly: monthlyRes,
                 });
             } catch (err) {
-                setError(err.message);
+                setError(formatError(err));
             } finally {
                 setLoading(false);
             }
@@ -60,21 +60,23 @@ function Index() {
     const totalTrans = data.summary.total_transaction || 0;
     const margin = totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(1) : 0;
     
+    // FIX: Gunakan data REAL dari API, bukan mock
     const sortedProducts = data.products.map(p => ({
         id: p.product_id,
         name: p.product_name,
         volume: p.sold,
-        profit: p.revenue * 0.3, // Mock profit for UI consistency if not provided
-        growth: Math.floor(Math.random() * 20) + 5 // Mock growth for UI consistency
+        profit: p.laba || 0,          // Data real dari backend
+        margin: p.margin || '0%'      // Data real dari backend
     }));
 
     const projectedSales = (data.monthly.length > 0 ? data.monthly[data.monthly.length - 1].revenue : 0) * 1.15;
 
+    // FIX: Gunakan laba_bersih real dari API, bukan mock 40%
     const chartData = useMemo(() => {
         return {
             labels: data.monthly.map(m => m.month),
             sales: data.monthly.map(m => m.revenue),
-            profit: data.monthly.map(m => m.revenue * 0.4), // Mock profit for chart
+            profit: data.monthly.map(m => m.laba_bersih || 0),
         };
     }, [data.monthly]);
 
@@ -156,7 +158,7 @@ function Index() {
                                                 <th>Produk</th>
                                                 <th>Unit</th>
                                                 <th>Laba</th>
-                                                <th>Trend</th>
+                                                <th>Margin</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -166,9 +168,8 @@ function Index() {
                                                     <td>{product.volume.toLocaleString('id-ID')} unit</td>
                                                     <td className="text-success fw-bold">{formatRupiah(product.profit)}</td>
                                                     <td>
-                                                        <span className="text-primary">
-                                                            <i className="fas fa-arrow-up me-1" />
-                                                            {product.growth}%
+                                                        <span className="text-primary fw-bold">
+                                                            {product.margin}
                                                         </span>
                                                     </td>
                                                 </tr>

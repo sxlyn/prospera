@@ -1,3 +1,19 @@
+/**
+ * transactionHelpers.js — Fungsi Pembantu Transaksi
+ * Sanitasi XSS diterapkan pada fungsi cetak struk.
+ */
+
+/**
+ * KEAMANAN: Escape karakter HTML berbahaya untuk mencegah XSS
+ * pada fungsi cetak struk (document.write).
+ */
+const escapeHtml = (str) => String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
 // Fungsi pembantu untuk memformat label tipe transaksi
 export const getTransactionTypeLabel = (transaction) => {
     if (!transaction?.TransactionDetails || transaction.TransactionDetails.length === 0) {
@@ -8,7 +24,7 @@ export const getTransactionTypeLabel = (transaction) => {
     return uniqueTypes.length === 1 ? uniqueTypes[0].toUpperCase() : "MIXED";
 };
 
-// Fungsi pencetak struk kasir (Isolated Print)
+// Fungsi pencetak struk kasir (Isolated Print — XSS-safe)
 export const printReceipt = (transactionData) => {
     if (!transactionData) return;
 
@@ -54,17 +70,17 @@ export const printReceipt = (transactionData) => {
                 </div>
                 <div class="border-dashed"></div>
                 <div>
-                    <div class="d-flex"><span>Tgl:</span> <span>${transactionData.date}</span></div>
-                    <div class="d-flex"><span>Tipe:</span> <span>${transactionData.type === 'sell' ? 'Penjualan' : 'Restock'}</span></div>
+                    <div class="d-flex"><span>Tgl:</span> <span>${escapeHtml(transactionData.date)}</span></div>
+                    <div class="d-flex"><span>Tipe:</span> <span>${escapeHtml(transactionData.type === 'sell' ? 'Penjualan' : 'Restock')}</span></div>
                 </div>
                 <div class="border-dashed"></div>
                 <div>
                     ${transactionData.items.map(item => `
                         <div style="margin-bottom: 8px;">
-                            <div class="fw-bold">${item.product_name}</div>
+                            <div class="fw-bold">${escapeHtml(item.product_name)}</div>
                             <div class="d-flex">
-                                <span>${item.quantity} x Rp${item.hargaJual}</span>
-                                <span>Rp${item.quantity * item.hargaJual}</span>
+                                <span>${escapeHtml(item.quantity)} x Rp${escapeHtml(item.hargaJual)}</span>
+                                <span>Rp${escapeHtml(item.quantity * item.hargaJual)}</span>
                             </div>
                         </div>
                     `).join('')}
@@ -72,7 +88,7 @@ export const printReceipt = (transactionData) => {
                 <div class="border-dashed"></div>
                 <div class="d-flex fw-bold" style="font-size: 14px;">
                     <span>TOTAL</span>
-                    <span>Rp${transactionData.total}</span>
+                    <span>Rp${escapeHtml(transactionData.total)}</span>
                 </div>
                 <div class="border-dashed"></div>
                 <div class="text-center" style="margin-top: 15px;">

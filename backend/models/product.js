@@ -23,7 +23,8 @@ module.exports = (sequelize, DataTypes) => {
     }
   }, {
     tableName: 'Products',
-    timestamps: false
+    timestamps: true,
+    paranoid: true // Mengaktifkan soft delete (deletedAt)
   });
 
   return Product;

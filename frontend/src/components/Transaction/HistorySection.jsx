@@ -1,11 +1,13 @@
 import React from 'react';
+import { formatRupiah } from '../../utils/format';
 
 export default function HistorySection({
   historySearchTerm, setHistorySearchTerm, activeTab, setActiveTab,
   dateFilterType, isDateMenuOpen, setIsDateMenuOpen,
   handleDateFilterChange, customStartDate, setCustomStartDate,
   customEndDate, setCustomEndDate, applyCustomDate,
-  loading, filteredHistory, getTransactionTypeLabel, openTransactionModal
+  loading, filteredHistory, getTransactionTypeLabel, openTransactionModal,
+  historyPage, historyTotalPages, historyTotalItems, fetchHistory
 }) {
   return (
     <div className="card">
@@ -88,7 +90,7 @@ export default function HistorySection({
                 return (
                   <tr key={tx.transaction_id}>
                     <td style={{ padding: "10px" }}>{tx.transaction_datetime ? new Date(tx.transaction_datetime).toLocaleString() : "-"}</td>
-                    <td style={{ padding: "10px", fontWeight: "500" }}>Rp{tx.total_amount}</td>
+                    <td style={{ padding: "10px", fontWeight: "500" }}>{formatRupiah(tx.total_amount)}</td>
                     <td style={{ padding: "10px" }}>
                       <span className={`badge ${txType === "SELL" ? "safe" : txType === "BUY" ? "low" : ""}`} style={txType === "MIXED" ? { background: "#E5E7EB", color: "#374151" } : { padding: "4px 10px", fontSize: "12px" }}>
                         {txType}
@@ -102,6 +104,33 @@ export default function HistorySection({
               })}
             </tbody>
           </table>
+
+          {/* Pagination Controls */}
+          {historyTotalPages > 1 && !historySearchTerm && activeTab === "ALL" && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", borderTop: "1px solid #e5e7eb", paddingTop: "15px" }}>
+              <span style={{ fontSize: "14px", color: "gray" }}>
+                Menampilkan halaman {historyPage} dari {historyTotalPages} ({historyTotalItems} riwayat)
+              </span>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button 
+                  className="btn btn-outline-primary btn-sm" 
+                  disabled={historyPage === 1}
+                  onClick={() => fetchHistory(dateFilterType, customStartDate, customEndDate, historyPage - 1)}
+                  style={{ borderRadius: "6px", padding: "5px 12px" }}
+                >
+                  <i className="fas fa-chevron-left me-1"></i> Prev
+                </button>
+                <button 
+                  className="btn btn-outline-primary btn-sm" 
+                  disabled={historyPage === historyTotalPages}
+                  onClick={() => fetchHistory(dateFilterType, customStartDate, customEndDate, historyPage + 1)}
+                  style={{ borderRadius: "6px", padding: "5px 12px" }}
+                >
+                  Next <i className="fas fa-chevron-right ms-1"></i>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -47,6 +47,4 @@ db.Transaction.hasMany(db.TransactionDetail, { foreignKey: 'transaction_id_fk' }
 // --------------------
 
 module.exports = db;
-module.exports = db;
-module.exports = db;
-module.exports = db;
+
