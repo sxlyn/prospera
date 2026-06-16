@@ -6,10 +6,12 @@ module.exports = (sequelize, DataTypes) => {
       autoIncrement: true
     },
     user_id_fk: {
-      type: DataTypes.INTEGER
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     total_amount: {
-      type: DataTypes.INTEGER, 
+      type: DataTypes.INTEGER,
+      allowNull: false,
       defaultValue: 0
     },
     transaction_type: {
@@ -34,6 +36,10 @@ module.exports = (sequelize, DataTypes) => {
     tableName: 'Transactions',
     timestamps: false
   });
+
+  Transaction.associate = (models) => {
+    Transaction.hasMany(models.TransactionDetail, { foreignKey: 'transaction_id_fk' });
+  };
 
   return Transaction;
 };

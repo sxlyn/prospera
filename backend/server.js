@@ -14,6 +14,14 @@ if (!process.env.JWT_SECRET) {
     process.exit(1);
 }
 
+// SECURITY FIX (B-T01): Tolak JWT_SECRET yang terlalu lemah/pendek
+// Minimum 32 karakter (128-bit entropy) untuk mencegah brute-force
+if (process.env.JWT_SECRET.length < 32) {
+    console.error('\n❌ FATAL ERROR: JWT_SECRET terlalu lemah! Minimal 32 karakter.');
+    console.error('   Generate secret baru: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"\n');
+    process.exit(1);
+}
+
 const app = express();
 
 // ===== LAPISAN KEAMANAN (Security Middleware Stack) =====

@@ -29,6 +29,13 @@ export const printReceipt = (transactionData) => {
     if (!transactionData) return;
 
     const printWindow = window.open('', '', 'height=600,width=400');
+
+    // UX FIX (F-S14): Tangani pop-up blocker browser
+    if (!printWindow) {
+        alert('Gagal membuka jendela cetak. Browser Anda mungkin memblokir pop-up.\n\nSilakan izinkan pop-up untuk situs ini di pengaturan browser, lalu coba lagi.');
+        return;
+    }
+
     printWindow.document.write(`
         <!DOCTYPE html>
         <html>

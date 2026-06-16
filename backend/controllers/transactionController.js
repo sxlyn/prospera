@@ -4,7 +4,12 @@ const { Op } = require('sequelize');
 // 1. Fungsi untuk melakukan proses pembayaran (Dilengkapi Sistem Rollback)
 const createTransaction = async (req, res, next) => {
     const userId = req.user.store_id; 
-    const { transaction_type = null, transaction_datetime, items } = req.body; 
+    const { transaction_type = null, items } = req.body; 
+
+    // SECURITY FIX (B-T07): Waktu transaksi dikontrol SERVER, bukan client
+    // Sebelumnya: transaction_datetime diambil dari req.body — rentan backdating/future-dating
+    // Sekarang: server menentukan timestamp saat transaksi diproses
+    const serverDatetime = new Date();
 
     // Membuka koneksi khusus untuk sistem pengamanan transaksi (Rollback)
     const t = await sequelize.transaction();
@@ -71,7 +76,7 @@ const createTransaction = async (req, res, next) => {
                 user_id_fk: userId,
                 total_amount: total_amount,
                 transaction_type: headerTransactionType,
-                transaction_datetime: transaction_datetime || undefined
+                transaction_datetime: serverDatetime  // SECURITY: Timestamp dikontrol server
             },
             { transaction: t }
         );

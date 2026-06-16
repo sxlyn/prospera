@@ -1,52 +1,40 @@
 const { Transaction, TransactionDetail, Product } = require("../models");
 const { Op, fn, col, literal } = require("sequelize");
-const { getDateFilter } = require("../utils/dateUtils"); 
+const { getDateFilter } = require("../utils/dateUtils");
+const { getStatusBreakdown, getFinancialSummary, getProductBreakdown } = require("../services/analyticsService"); 
 
-// 1. SUMMARY 
+/**
+ * SECURITY FIX (B-S15): Sanitasi parameter limit dari query string.
+ * Menolak nilai negatif, nol, NaN, dan membatasi maksimum 100 untuk mencegah abuse.
+ * @param {string|number} rawLimit - Nilai limit dari req.query
+ * @param {number} defaultVal - Nilai default jika limit tidak valid (default: 5)
+ * @returns {number} Limit yang aman
+ */
+const sanitizeLimit = (rawLimit, defaultVal = 5) => {
+    const parsed = parseInt(rawLimit);
+    if (!rawLimit || isNaN(parsed) || parsed <= 0) return defaultVal;
+    return Math.min(parsed, 100); // Cap at 100 to prevent memory abuse
+};
+
+// 1. SUMMARY — REFACTOR (B-T14): Menggunakan shared analyticsService
 const getSummary = async (req, res, next) => {
     try {
         const { startDate, endDate } = req.query;
         const userId = req.user.store_id;
 
-        const statusData = await Transaction.findAll({
-            where: { ...getDateFilter(startDate, endDate), user_id_fk: userId },
-            attributes: ['status', [fn('COUNT', col('*')), 'count']],
-            group: ['status'],
-            raw: true
-        });
+        // Gunakan shared service (Single Source of Truth)
+        const [statusBreakdown, financial, formattedDetails] = await Promise.all([
+            getStatusBreakdown(startDate, endDate, userId),
+            getFinancialSummary(startDate, endDate, userId),
+            getProductBreakdown(startDate, endDate, userId)
+        ]);
 
-        let success = 0, pending = 0, cancelled = 0;
-        let total_transaction_all = 0;
-
-        statusData.forEach(item => {
-            const count = parseInt(item.count);
-            if (item.status === 'success') success = count;
-            if (item.status === 'pending') pending = count;
-            if (item.status === 'cancelled') cancelled = count;
-            total_transaction_all += count;
-        });
-
-        const financialData = await TransactionDetail.findAll({
-            include: [{
-                model: Transaction,
-                attributes: [],
-                where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' }
-            }],
-            attributes: [
-                [fn('SUM', col('quantity')), 'items_sold'],
-                [literal(`SUM(selling_price * quantity)`), 'revenue'],
-                [literal(`SUM(CASE WHEN selling_price > capital_cost THEN (selling_price - capital_cost) * quantity ELSE 0 END)`), 'total_profit']
-            ],
-            raw: true
-        });
-
-        const fin = financialData[0] || {};
-        const items_sold = parseInt(fin.items_sold) || 0;
-        const revenue = parseFloat(fin.revenue) || 0;
-        const total_profit = parseFloat(fin.total_profit) || 0;
+        const { success, total_transaction_all } = statusBreakdown;
+        const { items_sold, revenue, total_profit } = financial;
         const average_sale = success > 0 ? Math.round(revenue / success) : 0;
 
-        let revenue_growth = "N/A"; 
+        // Revenue growth (logika unik untuk endpoint ini, tetap inline)
+        let revenue_growth = "N/A";
         if (startDate && endDate) {
             const start = new Date(startDate);
             const end = new Date(endDate);
@@ -63,6 +51,7 @@ const getSummary = async (req, res, next) => {
                     attributes: [],
                     where: { ...getDateFilter(prevStart.toISOString().split('T')[0], prevEnd.toISOString().split('T')[0]), user_id_fk: userId, status: 'success' }
                 }],
+                where: { transaction_type: 'sell' },
                 attributes: [[literal(`SUM(selling_price * quantity)`), 'prev_revenue']],
                 raw: true
             });
@@ -70,7 +59,7 @@ const getSummary = async (req, res, next) => {
             const prev_revenue = parseFloat(prevFinancialData[0]?.prev_revenue) || 0;
 
             if (prev_revenue === 0 && revenue > 0) {
-                revenue_growth = "+100%"; 
+                revenue_growth = "+100%";
             } else if (prev_revenue > 0) {
                 const growthCalc = ((revenue - prev_revenue) / prev_revenue) * 100;
                 const sign = growthCalc > 0 ? "+" : "";
@@ -80,29 +69,9 @@ const getSummary = async (req, res, next) => {
             }
         }
 
-        const detailsData = await TransactionDetail.findAll({
-            attributes: [
-                [fn("SUM", col("quantity")), "qty"],
-                [fn("SUM", literal("quantity * selling_price")), "subtotal"]
-            ],
-            include: [
-                { model: Product, attributes: ["product_name"], required: true, paranoid: false },
-                { model: Transaction, attributes: [], where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' } }
-            ],
-            group: ["Product.product_id", "Product.product_name"],
-            order: [[literal("qty"), "DESC"]],
-            raw: true
-        });
-
-        const formattedDetails = detailsData.map(item => ({
-            name: item["Product.product_name"],
-            qty: parseInt(item.qty) || 0,
-            subtotal: parseFloat(item.subtotal) || 0
-        }));
-
         res.json({
             summary: { total_transaction: total_transaction_all, items_sold, revenue, total_profit, average_sale, revenue_growth },
-            status_breakdown: { success, pending, cancelled },
+            status_breakdown: { success: statusBreakdown.success, pending: statusBreakdown.pending, cancelled: statusBreakdown.cancelled },
             details: formattedDetails
         });
     } catch (error) {
@@ -122,6 +91,7 @@ const getProfit = async (req, res, next) => {
                 attributes: [],
                 where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' }
             }],
+            where: { transaction_type: 'sell' },
             attributes: [
                 [literal(`SUM(CASE WHEN selling_price > capital_cost THEN (selling_price - capital_cost) * quantity ELSE 0 END)`), "total_profit"],
                 [literal(`SUM(CASE WHEN selling_price < capital_cost THEN (capital_cost - selling_price) * quantity ELSE 0 END)`), "total_loss"],
@@ -159,9 +129,10 @@ const getTopProduct = async (req, res, next) => {
                 { model: Product, attributes: ["product_name"], required: true, paranoid: false },
                 { model: Transaction, attributes: [], where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' } }
             ],
+            where: { transaction_type: 'sell' },
             group: ["Product.product_id", "Product.product_name"],
             order: [[literal("sold"), "DESC"]],
-            limit: limit ? parseInt(limit) : 5,
+            limit: sanitizeLimit(limit),
             raw: true
         });
 
@@ -196,6 +167,7 @@ const getMonthly = async (req, res, next) => {
                 attributes: [],
                 where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' }
             }],
+            where: { transaction_type: 'sell' },
             attributes: [
                 [fn("DATE_FORMAT", col("Transaction.transaction_datetime"), "%Y-%m"), "month"],
                 [literal(`SUM(selling_price * quantity)`), "revenue"],
@@ -236,10 +208,11 @@ const getLossProducts = async (req, res, next) => {
                 { model: Product, attributes: ["product_name"], required: true, paranoid: false },
                 { model: Transaction, attributes: [], where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' } }
             ],
-            where: literal('selling_price < capital_cost'),
+            where: { transaction_type: 'sell', ...Object.fromEntries([]) },
+            having: literal('SUM((capital_cost - selling_price) * quantity) > 0'),
             group: ["Product.product_id", "Product.product_name"],
             order: [[literal("rugi"), "DESC"]],
-            limit: limit ? parseInt(limit) : 5,
+            limit: sanitizeLimit(limit),
             raw: true
         });
 

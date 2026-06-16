@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ModalExport from '../components/ModalExport';
 import TrendChart from '../components/TrendChart';
@@ -11,8 +11,15 @@ function Index() {
     const [period, setPeriod] = useState('monthly');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // PERFORMANCE FIX (F-T05): Pisahkan input state (UI) dari applied state (API)
+    // Input state: berubah setiap keystroke, TIDAK memicu API call
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    // Applied state: berubah 500ms setelah user berhenti mengetik, MEMICU API call
+    const [appliedStartDate, setAppliedStartDate] = useState('');
+    const [appliedEndDate, setAppliedEndDate] = useState('');
+
     const [data, setData] = useState({
         summary: {},
         products: [],
@@ -23,13 +30,25 @@ function Index() {
         setSearchParams({ view: newView });
     };
 
+    // Debounce: Tunda penerapan filter 500ms setelah user berhenti mengetik
+    const debounceRef = useRef(null);
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            setAppliedStartDate(startDate);
+            setAppliedEndDate(endDate);
+        }, 500);
+        return () => clearTimeout(debounceRef.current);
+    }, [startDate, endDate]);
+
+    // API call hanya terpicu oleh applied state (setelah debounce selesai)
     useEffect(() => {
         const fetchData = async () => {
             try {
                 setLoading(true);
                 const params = new URLSearchParams();
-                if (startDate) params.append('startDate', startDate);
-                if (endDate) params.append('endDate', endDate);
+                if (appliedStartDate) params.append('startDate', appliedStartDate);
+                if (appliedEndDate) params.append('endDate', appliedEndDate);
                 
                 const query = params.toString() ? `?${params.toString()}` : '';
                 const topProductQuery = params.toString() ? `?${params.toString()}&limit=4` : '?limit=4';
@@ -53,7 +72,7 @@ function Index() {
         };
 
         fetchData();
-    }, [startDate, endDate]);
+    }, [appliedStartDate, appliedEndDate]);
 
     const totalProfit = data.summary.total_profit || 0;
     const totalSales = data.summary.revenue || 0;

@@ -6,19 +6,24 @@ module.exports = (sequelize, DataTypes) => {
       autoIncrement: true
     },
     transaction_id_fk: {
-      type: DataTypes.INTEGER
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     product_id_fk: {
-      type: DataTypes.INTEGER
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     quantity: {
-      type: DataTypes.INTEGER
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     capital_cost: {
-      type: DataTypes.INTEGER
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     selling_price: {
-      type: DataTypes.INTEGER
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     transaction_type: {
       type: DataTypes.ENUM('buy', 'sell'),
@@ -26,12 +31,18 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     sub_total: {
-      type: DataTypes.INTEGER
+      type: DataTypes.INTEGER,
+      allowNull: false
     }
   }, {
     tableName: 'Transaction_details',
     timestamps: false
   });
+
+  TransactionDetail.associate = (models) => {
+    TransactionDetail.belongsTo(models.Product, { foreignKey: 'product_id_fk' });
+    TransactionDetail.belongsTo(models.Transaction, { foreignKey: 'transaction_id_fk' });
+  };
 
   return TransactionDetail;
 };

@@ -26,11 +26,22 @@ export const getCurrentUser = () => {
 
 /**
  * Mengambil role user saat ini dari localStorage
+ * SECURITY FIX (F-S10): Validasi role terhadap whitelist yang diizinkan.
+ * Jika role di-manipulasi manual (misal: 'admin', 'superuser'), akan ditolak.
  * @returns {'owner'|'karyawan'|null}
  */
+const ALLOWED_ROLES = ['owner', 'karyawan'];
+
 export const getUserRole = () => {
     const user = getCurrentUser();
-    return user?.role || null;
+    const role = user?.role || null;
+    // Tolak role yang tidak ada dalam whitelist
+    if (role && !ALLOWED_ROLES.includes(role)) {
+        console.error(`[Security] Role tidak dikenali: "${role}". Sesi dihapus.`);
+        clearAuthSession();
+        return null;
+    }
+    return role;
 };
 
 /**
@@ -59,11 +70,27 @@ export const isTokenValid = () => {
     if (!token) return false;
 
     try {
-        // JWT format: header.payload.signature
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        // exp adalah Unix timestamp dalam detik
+        // SECURITY FIX (F-T07): Validasi struktur JWT (harus punya 3 bagian)
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            console.error('[Security] Token JWT memiliki format yang tidak valid.');
+            return false;
+        }
+
+        // Decode payload tanpa verifikasi signature (itu tugas backend)
+        const payload = JSON.parse(atob(parts[1]));
+
+        // Cek expiry
         const isExpired = payload.exp * 1000 < Date.now();
-        return !isExpired;
+        if (isExpired) return false;
+
+        // Validasi: payload harus memiliki field yang diharapkan
+        if (!payload.id || !payload.store_id) {
+            console.error('[Security] Token tidak memiliki payload yang diharapkan.');
+            return false;
+        }
+
+        return true;
     } catch {
         // Token corrupt / format salah → anggap tidak valid
         return false;

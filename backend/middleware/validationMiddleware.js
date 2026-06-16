@@ -33,6 +33,13 @@ const validateRegister = (req, res, next) => {
         return res.status(400).json({ message: "Password wajib diisi dan minimal 6 karakter." });
     }
 
+    // SECURITY FIX (B-T10): Batas maksimal password untuk mencegah ReDoS pada Bcrypt
+    // Bcrypt secara internal hanya memproses 72 byte pertama, sehingga password >64 char tidak berguna
+    // dan bisa dimanfaatkan penyerang untuk mengirim string sangat panjang (DoS via slow hashing)
+    if (String(password).length > 64) {
+        return res.status(400).json({ message: "Password maksimal 64 karakter." });
+    }
+
     // Sanitasi: simpan nilai yang sudah dibersihkan ke req.body
     req.body.username = String(username).trim();
     req.body.email = String(email).trim().toLowerCase();

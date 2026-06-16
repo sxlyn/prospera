@@ -6,16 +6,20 @@ module.exports = (sequelize, DataTypes) => {
       autoIncrement: true
     },
     user_id_fk: {
-      type: DataTypes.INTEGER
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     product_name: {
-      type: DataTypes.STRING(150) 
+      type: DataTypes.STRING(150),
+      allowNull: false
     },
     product_cost: {
-      type: DataTypes.INTEGER 
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     product_price: {
-      type: DataTypes.INTEGER 
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     product_stock: {
       type: DataTypes.INTEGER,
@@ -26,6 +30,10 @@ module.exports = (sequelize, DataTypes) => {
     timestamps: true,
     paranoid: true // Mengaktifkan soft delete (deletedAt)
   });
+
+  Product.associate = (models) => {
+    Product.hasMany(models.TransactionDetail, { foreignKey: 'product_id_fk' });
+  };
 
   return Product;
 };

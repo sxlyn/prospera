@@ -145,6 +145,7 @@ const getAllUsers = async (req, res, next) => {
 /**
  * deleteUserById — Owner menghapus akun Karyawan
  * Owner TIDAK bisa menghapus dirinya sendiri.
+ * SECURITY: Filter by owner_id untuk mencegah IDOR (cross-tenant deletion).
  */
 const deleteUserById = async (req, res, next) => {
     try {
@@ -156,18 +157,25 @@ const deleteUserById = async (req, res, next) => {
             return res.status(400).json({ message: "Anda tidak dapat menghapus akun Anda sendiri." });
         }
 
-        // Cari user target
-        const targetUser = await User.findByPk(targetId);
+        // SECURITY FIX (B-T03): Cari user target HANYA dalam lingkup toko Owner ini
+        // Sebelumnya: User.findByPk(targetId) — bisa mengakses user milik toko lain
+        const targetUser = await User.findOne({
+            where: {
+                user_id: targetId,
+                owner_id: req.user.id  // Isolasi tenant: hanya karyawan milik Owner ini
+            }
+        });
+
         if (!targetUser) {
             return res.status(404).json({ message: "Pengguna tidak ditemukan." });
         }
 
-        // Cegah menghapus Owner lain (jaga-jaga)
+        // Cegah menghapus Owner lain (lapisan pertahanan tambahan)
         if (targetUser.role === 'owner') {
             return res.status(403).json({ message: "Tidak dapat menghapus akun Owner." });
         }
 
-        await User.destroy({ where: { user_id: targetId } });
+        await targetUser.destroy();
 
         res.status(200).json({ message: `Akun "${targetUser.username}" berhasil dihapus.` });
     } catch (error) {
@@ -176,18 +184,39 @@ const deleteUserById = async (req, res, next) => {
 };
 
 /**
- * deleteUser — User menghapus akun sendiri (legacy, tetap dipertahankan)
+ * deleteUser — User menghapus akun sendiri
+ * SECURITY FIX (B-T04): Menambahkan safeguard dan cascade cleanup.
+ * - Owner tidak bisa menghapus diri jika masih punya karyawan aktif
+ * - Semua produk milik user akan ikut terhapus (cascade)
  */
 const deleteUser = async (req, res, next) => {
     try {
         const idTarget = req.user.id;
-        const deletedRows = await User.destroy({ where: { user_id: idTarget } });
+        const user = await User.findByPk(idTarget);
 
-        if (deletedRows === 0) {
+        if (!user) {
             return res.status(404).json({ message: "Pengguna tidak ditemukan." });
         }
 
-        res.status(200).json({ message: "Akun Anda berhasil dihapus." });
+        // Safeguard: Jika Owner, cek apakah masih punya karyawan aktif
+        if (user.role === 'owner') {
+            const { User: UserModel } = require('../models');
+            const activeEmployees = await UserModel.count({ where: { owner_id: idTarget } });
+            if (activeEmployees > 0) {
+                return res.status(400).json({ 
+                    message: `Anda masih memiliki ${activeEmployees} karyawan aktif. Hapus semua karyawan terlebih dahulu sebelum menghapus akun Owner.` 
+                });
+            }
+        }
+
+        // Cascade cleanup: Hapus produk milik user ini
+        const { Product } = require('../models');
+        await Product.destroy({ where: { user_id_fk: req.user.store_id }, force: true });
+
+        // Hapus user
+        await user.destroy();
+
+        res.status(200).json({ message: "Akun Anda berhasil dihapus beserta seluruh data terkait." });
     } catch (error) {
         next(error);
     }
