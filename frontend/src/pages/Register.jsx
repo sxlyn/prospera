@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { apiFetch, formatError } from "../utils/api";
 
 // Regex standar industri — SELARAS dengan backend validationMiddleware.js
-const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+import { EMAIL_REGEX } from "../utils/validators";
 
 export default function Register() {
   const [username, setUsername] = useState("");

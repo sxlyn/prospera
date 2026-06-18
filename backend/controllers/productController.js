@@ -1,4 +1,4 @@
-const { Product } = require('../models');
+const { Product, Category } = require('../models');
 const { getStockStatus } = require('../utils/stockHelper');
 
 // Mengambil seluruh data produk berdasarkan ID pengguna yang sedang masuk.
@@ -14,7 +14,11 @@ const getAllProducts = async (req, res, next) => {
             where: { user_id_fk: userId },
             limit: limit,
             offset: offset,
-            order: [['product_id', 'DESC']] 
+            order: [['product_id', 'DESC']],
+            include: [{
+                model: Category,
+                attributes: ['category_id', 'category_name', 'requires_expired_date']
+            }]
         });
 
         // Terapkan fungsi dari Shared Helper ke setiap produk
@@ -45,7 +49,11 @@ const getProductById = async (req, res, next) => {
             where: { 
                 product_id: productId, 
                 user_id_fk: userId 
-            }
+            },
+            include: [{
+                model: Category,
+                attributes: ['category_id', 'category_name', 'requires_expired_date']
+            }]
         });
         
         if (!product) {
@@ -61,7 +69,7 @@ const getProductById = async (req, res, next) => {
 const createProduct = async (req, res, next) => {
     try {
         const userId = req.user.store_id; 
-        const { product_name, product_cost, product_price, product_stock } = req.body;
+        const { product_name, product_cost, product_price, product_stock, category_id_fk, expired_date } = req.body;
         
         // Cek duplikasi nama produk (logika bisnis, tetap di controller)
         const existingProduct = await Product.findOne({
@@ -80,7 +88,9 @@ const createProduct = async (req, res, next) => {
             product_name: product_name,
             product_cost: product_cost,
             product_price: product_price,
-            product_stock: product_stock
+            product_stock: product_stock,
+            category_id_fk: category_id_fk || null,
+            expired_date: expired_date || null
         });
 
         res.status(201).json({ 
@@ -97,7 +107,7 @@ const updateProduct = async (req, res, next) => {
     try {
         const userId = req.user.store_id;
         const productId = req.params.id;
-        const { product_name, product_cost, product_price, product_stock } = req.body;
+        const { product_name, product_cost, product_price, product_stock, category_id_fk, expired_date } = req.body;
 
         // Cek duplikasi nama produk (logika bisnis, tetap di controller)
         const duplicateProduct = await Product.findOne({
@@ -116,7 +126,9 @@ const updateProduct = async (req, res, next) => {
                 product_name: product_name,
                 product_cost: product_cost,
                 product_price: product_price,
-                product_stock: product_stock
+                product_stock: product_stock,
+                category_id_fk: category_id_fk || null,
+                expired_date: expired_date || null
             },
             {
                 where: { 

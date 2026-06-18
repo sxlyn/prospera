@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatRupiah } from '../../utils/format';
 
 export default function TransactionDetailModal({
@@ -22,26 +21,30 @@ export default function TransactionDetailModal({
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="table-simple" style={{ width: "100%" }}>
             <thead>
-              <tr style={{ textAlign: "left", borderBottom: "2px solid #E5E7EB" }}>
-                <th style={{ padding: "10px" }}>Produk</th>
-                <th style={{ padding: "10px" }}>Tipe</th>
-                <th style={{ padding: "10px" }}>Qty</th>
-                <th style={{ padding: "10px" }}>Modal</th>
-                <th style={{ padding: "10px" }}>Harga</th>
-                <th style={{ padding: "10px" }}>Subtotal</th>
+              <tr style={{ textAlign: "left" }}>
+                <th>Produk</th>
+                <th>Tipe</th>
+                <th>Qty</th>
+                <th>Modal</th>
+                <th>Harga</th>
+                <th>Subtotal</th>
               </tr>
             </thead>
             <tbody>
               {selectedTransaction.TransactionDetails?.map((item) => (
-                <tr key={`${item.detail_id}-${item.product_id_fk}`}>
-                  <td style={{ padding: "10px" }}>{item.Product?.product_name || "-"}</td>
-                  <td style={{ padding: "10px" }}>{item.transaction_type?.toUpperCase() || "-"}</td>
-                  <td style={{ padding: "10px" }}>{item.quantity}</td>
-                  <td style={{ padding: "10px" }}>{formatRupiah(item.capital_cost)}</td>
-                  <td style={{ padding: "10px" }}>{formatRupiah(item.selling_price)}</td>
-                  <td style={{ padding: "10px", fontWeight: "600" }}>{formatRupiah(item.sub_total)}</td>
+                <tr key={item.detail_id}>
+                  <td>{item.Product?.product_name || "-"}</td>
+                  <td>
+                      <span className={item.transaction_type?.toUpperCase() === "SELL" ? "badge safe" : "badge low"}>
+                        {item.transaction_type?.toUpperCase() === "SELL" ? "Jual" : "Beli"}
+                      </span>
+                  </td>
+                  <td>{item.quantity}</td>
+                  <td>{formatRupiah(item.capital_cost)}</td>
+                  <td>{formatRupiah(item.selling_price)}</td>
+                  <td className="fw-bold">{formatRupiah(item.sub_total)}</td>
                 </tr>
               ))}
             </tbody>

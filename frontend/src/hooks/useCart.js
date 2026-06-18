@@ -31,12 +31,16 @@ export function useCart(products, fetchProducts, fetchHistory) {
     const [searchTerm, setSearchTerm] = useState("");
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-    const selectedProduct = products.find(
-        (p) => String(p.product_id) === String(selectedProductId)
+    // PERFORMANCE FIX (F-S19): Memoize derived state
+    const selectedProduct = useMemo(() => 
+        products.find((p) => String(p.product_id) === String(selectedProductId)),
+        [products, selectedProductId]
     );
 
-    const filteredProducts = products.filter((p) =>
-        p.product_name.toLowerCase().includes(searchTerm.toLowerCase())
+    // PERFORMANCE FIX (F-S19): Memoize filtered list
+    const filteredProducts = useMemo(() => 
+        products.filter((p) => p.product_name.toLowerCase().includes(searchTerm.toLowerCase())),
+        [products, searchTerm]
     );
 
     // FIX: Hitung total berdasarkan tipe transaksi (selaras dengan backend)

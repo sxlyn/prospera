@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { apiFetch, setAuthSession, getToken, getUserRole, formatError } from "../utils/api";
 
 // Regex standar industri — SELARAS dengan backend validationMiddleware.js
-const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+import { EMAIL_REGEX } from "../utils/validators";
 
 export default function Login() {
   const [activeTab, setActiveTab] = useState("owner"); // "owner" atau "karyawan"
@@ -27,7 +27,8 @@ export default function Login() {
     }
   }, [nav]);
 
-  const login = async () => {
+  const login = async (e) => {
+    if (e) e.preventDefault();
     setMessage("");
 
     // --- VALIDASI CLIENT-SIDE (selaras dengan backend) ---
@@ -78,9 +79,9 @@ export default function Login() {
     }
   };
 
-  // Handler: Submit form dengan Enter
+  // Handler: Submit form dengan Enter (bisa dihapus karena sudah pakai form onSubmit)
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") login();
+    if (e.key === "Enter" && !isSubmitting) login(e);
   };
 
   return (
@@ -147,29 +148,31 @@ export default function Login() {
           </div>
         )}
 
-        <input 
-          className="input" 
-          placeholder={activeTab === 'owner' ? "Email Pemilik" : "Email Karyawan"} 
-          type="email"
-          value={email} 
-          onChange={e => setEmail(e.target.value)} 
-          onKeyDown={handleKeyDown} 
-        />
-        <input 
-          className="input" 
-          placeholder="Password" 
-          type="password"
-          value={password} 
-          onChange={e => setPassword(e.target.value)} 
-          onKeyDown={handleKeyDown} 
-        />
-          
-        <div> 
-          <button className="button" onClick={login} disabled={isSubmitting}
-            style={{ opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? "not-allowed" : "pointer", marginTop: '10px' }}>
-            {isSubmitting ? "Memproses..." : "Masuk"}
-          </button>
-        </div>
+        <form onSubmit={login}>
+          <input 
+            className="input" 
+            placeholder={activeTab === 'owner' ? "Email Pemilik" : "Email Karyawan"} 
+            type="email"
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            onKeyDown={handleKeyDown} 
+          />
+          <input 
+            className="input" 
+            placeholder="Password" 
+            type="password"
+            value={password} 
+            onChange={e => setPassword(e.target.value)} 
+            onKeyDown={handleKeyDown} 
+          />
+            
+          <div> 
+            <button type="submit" className="button" disabled={isSubmitting}
+              style={{ opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? "not-allowed" : "pointer", marginTop: '10px' }}>
+              {isSubmitting ? "Memproses..." : "Masuk"}
+            </button>
+          </div>
+        </form>
 
         {/* Link Daftar HANYA muncul untuk Owner */}
         {activeTab === 'owner' ? (

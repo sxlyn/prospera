@@ -8,7 +8,7 @@
  */
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { clearAuthSession, getUserRole } from '../utils/api';
+import { clearAuthSession } from '../utils/api';
 import LogoutModal from './LogoutModal';
 import ChangePasswordModal from './ChangePasswordModal';
 
@@ -36,6 +36,7 @@ function Sidebar() {
     const allMenu = [
         { path: '/dashboard', label: 'Dashboard', icon: 'fas fa-th-large', roles: ['owner'] },
         { path: '/products', label: 'Produk', icon: 'fas fa-box', roles: ['owner', 'karyawan'] },
+        { path: '/categories', label: 'Kategori', icon: 'fas fa-tags', roles: ['owner', 'karyawan'] },
         { path: '/transaction', label: 'Transaksi', icon: 'fas fa-shopping-cart', roles: ['owner', 'karyawan'] },
         { path: '/bi-analytics', label: 'Analitik Bisnis', icon: 'fas fa-chart-bar', roles: ['owner'] },
         { path: '/smart-predict', label: 'Fitur Pintar', icon: 'fas fa-robot', roles: ['owner'] },

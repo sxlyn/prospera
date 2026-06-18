@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { apiFetch, formatError } from "../utils/api";
+import { apiFetch } from "../utils/api";
 import { getTransactionTypeLabel } from "../utils/transactionHelpers";
 import { useCart } from "./useCart";
 import { useHistory } from "./useHistory";
@@ -99,6 +99,7 @@ export function useTransactionLogic() {
         activeTab: historyHook.activeTab,
         setActiveTab: historyHook.setActiveTab,
         dateFilterType: historyHook.dateFilterType,
+        setDateFilterType: historyHook.setDateFilterType,
         customStartDate: historyHook.customStartDate,
         setCustomStartDate: historyHook.setCustomStartDate,
         customEndDate: historyHook.customEndDate,

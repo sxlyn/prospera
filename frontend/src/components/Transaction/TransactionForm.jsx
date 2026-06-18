@@ -1,4 +1,3 @@
-import React from 'react';
 
 export default function TransactionForm({
   searchTerm, setSearchTerm, isDropdownOpen, setIsDropdownOpen,

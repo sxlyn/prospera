@@ -13,15 +13,17 @@ module.exports = {
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash('password123', salt);
 
-    await queryInterface.bulkInsert('Users', [{
-      username: 'prospera01',
-      email: 'prospera01@gmail.com',
-      password: hashedPassword,
-      role: 'owner',      // B-T11: Eksplisit set role
-      owner_id: null,      // B-T11: Owner tidak punya owner_id (dia sendiri pemilik)
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }], {});
+    try {
+      await queryInterface.bulkInsert('Users', [{
+        username: 'prospera01',
+        email: 'prospera01@gmail.com',
+        password: hashedPassword,
+        role: 'owner',      // B-T11: Eksplisit set role
+        owner_id: null      // B-T11: Owner tidak punya owner_id (dia sendiri pemilik)
+      }], {});
+    } catch (error) {
+      console.log('User seeder: Data already exists or validation error, skipping.');
+    }
   },
 
   async down (queryInterface, Sequelize) {

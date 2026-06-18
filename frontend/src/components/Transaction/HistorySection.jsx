@@ -1,9 +1,8 @@
-import React from 'react';
 import { formatRupiah } from '../../utils/format';
 
 export default function HistorySection({
   historySearchTerm, setHistorySearchTerm, activeTab, setActiveTab,
-  dateFilterType, isDateMenuOpen, setIsDateMenuOpen,
+  dateFilterType, setDateFilterType, isDateMenuOpen, setIsDateMenuOpen,
   handleDateFilterChange, customStartDate, setCustomStartDate,
   customEndDate, setCustomEndDate, applyCustomDate,
   loading, filteredHistory, getTransactionTypeLabel, openTransactionModal,
@@ -71,37 +70,38 @@ export default function HistorySection({
 
       {loading ? (
         <p>Loading history...</p>
-      ) : filteredHistory.length === 0 ? (
-        <p style={{ color: "#6B7280", textAlign: "center", padding: "20px 0" }}>Belum ada transaksi tersimpan untuk rentang/kategori ini.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="table-simple" style={{ width: "100%" }}>
             <thead>
-              <tr style={{ textAlign: "left", borderBottom: "2px solid #E5E7EB" }}>
-                <th style={{ padding: "10px" }}>Tanggal</th>
-                <th style={{ padding: "10px" }}>Total</th>
-                <th style={{ padding: "10px" }}>Tipe</th>
-                <th style={{ padding: "10px" }}>Aksi</th>
+              <tr style={{ textAlign: "left" }}>
+                <th>Tanggal</th>
+                <th>Total</th>
+                <th>Tipe</th>
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {filteredHistory.map((tx) => {
-                const txType = getTransactionTypeLabel(tx);
-                return (
+              {filteredHistory.length === 0 ? (
+                <tr>
+                  <td colSpan="4" style={{ textAlign: "center", color: "#6B7280", padding: "20px" }}>Tidak ada data pada halaman ini</td>
+                </tr>
+              ) : (
+                filteredHistory.map((tx) => (
                   <tr key={tx.transaction_id}>
-                    <td style={{ padding: "10px" }}>{tx.transaction_datetime ? new Date(tx.transaction_datetime).toLocaleString() : "-"}</td>
-                    <td style={{ padding: "10px", fontWeight: "500" }}>{formatRupiah(tx.total_amount)}</td>
-                    <td style={{ padding: "10px" }}>
-                      <span className={`badge ${txType === "SELL" ? "safe" : txType === "BUY" ? "low" : ""}`} style={txType === "MIXED" ? { background: "#E5E7EB", color: "#374151" } : { padding: "4px 10px", fontSize: "12px" }}>
-                        {txType}
+                    <td>{tx.transaction_datetime ? new Date(tx.transaction_datetime).toLocaleString('id-ID') : "-"}</td>
+                    <td className="fw-bold">{formatRupiah(tx.total_amount)}</td>
+                    <td>
+                      <span className={getTransactionTypeLabel(tx) === "SELL" ? "badge safe" : "badge low"}>
+                        {getTransactionTypeLabel(tx) === "SELL" ? "Penjualan" : "Restock"}
                       </span>
                     </td>
-                    <td style={{ padding: "10px" }}>
+                    <td>
                       <button className="button" style={{ padding: "6px 12px", fontSize: "13px" }} onClick={() => openTransactionModal(tx)}>Detail</button>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
 
@@ -118,7 +118,7 @@ export default function HistorySection({
                   onClick={() => fetchHistory(dateFilterType, customStartDate, customEndDate, historyPage - 1)}
                   style={{ borderRadius: "6px", padding: "5px 12px" }}
                 >
-                  <i className="fas fa-chevron-left me-1"></i> Prev
+                  <i className="fas fa-chevron-left me-1"></i> Sebelumnya
                 </button>
                 <button 
                   className="btn btn-outline-primary btn-sm" 
@@ -126,7 +126,7 @@ export default function HistorySection({
                   onClick={() => fetchHistory(dateFilterType, customStartDate, customEndDate, historyPage + 1)}
                   style={{ borderRadius: "6px", padding: "5px 12px" }}
                 >
-                  Next <i className="fas fa-chevron-right ms-1"></i>
+                  Selanjutnya <i className="fas fa-chevron-right ms-1"></i>
                 </button>
               </div>
             </div>

@@ -51,6 +51,7 @@ const transactionRoutes = require('./routes/transactionRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const forecastRoutes = require('./routes/forecastRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
 
 // Mendaftarkan rute antarmuka pemrograman aplikasi ke dalam server
 app.use('/api/auth', authRoutes);
@@ -59,6 +60,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/forecast', forecastRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // Rute pengujian server
 app.get('/', (req, res) => {

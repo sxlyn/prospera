@@ -33,8 +33,13 @@ export default function ProductList({ products, searchTerm, onSearchChange, role
                         <div style={{ flex: 1 }}>
                             <div className="product-item-header">
                                 <div>
-                                    <div className="product-item-meta">
+                                    <div className="product-item-meta d-flex align-items-center gap-2">
                                         <small className="text-muted">ID: {p.product_id || p.id}</small>
+                                        {p.Category && (
+                                            <span className="badge" style={{ background: '#E5E7EB', color: '#374151', padding: "2px 8px", fontSize: "10px" }}>
+                                                <i className="fas fa-tag me-1"></i> {p.Category.category_name}
+                                            </span>
+                                        )}
                                         <span className={p.stock_status === "Low Stock" ? "badge low" : "badge safe"} 
                                               style={{ padding: "2px 8px", fontSize: "10px" }}>
                                             {p.stock_status || "Safe"}
@@ -55,6 +60,11 @@ export default function ProductList({ products, searchTerm, onSearchChange, role
                             </div>
                             <div className="stock" style={{ marginTop: "8px" }}>
                                 Modal: {formatRupiah(p.product_cost)} | Jual: <span className="text-green fw-bold">{formatRupiah(p.product_price)}</span> | Stok: {p.product_stock}
+                                {p.expired_date && (
+                                    <span className="ms-2 text-danger fw-medium" style={{ fontSize: "12px" }}>
+                                        | <i className="fas fa-exclamation-circle me-1"></i> Exp: {new Date(p.expired_date).toLocaleDateString('id-ID')}
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -78,7 +88,7 @@ export default function ProductList({ products, searchTerm, onSearchChange, role
                             onClick={() => onPageChange(pagination.currentPage - 1)}
                             style={{ borderRadius: "6px", padding: "5px 12px" }}
                         >
-                            <i className="fas fa-chevron-left me-1"></i> Prev
+                            <i className="fas fa-chevron-left me-1"></i> Sebelumnya
                         </button>
                         <button 
                             className="btn btn-outline-primary btn-sm" 
@@ -86,7 +96,7 @@ export default function ProductList({ products, searchTerm, onSearchChange, role
                             onClick={() => onPageChange(pagination.currentPage + 1)}
                             style={{ borderRadius: "6px", padding: "5px 12px" }}
                         >
-                            Next <i className="fas fa-chevron-right ms-1"></i>
+                            Selanjutnya <i className="fas fa-chevron-right ms-1"></i>
                         </button>
                     </div>
                 </div>

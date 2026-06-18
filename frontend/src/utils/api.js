@@ -92,7 +92,7 @@ export const isTokenValid = () => {
         if (isExpired) return false;
 
         // Validasi: payload harus memiliki field yang diharapkan
-        if (!payload.id || !payload.store_id) {
+        if (!payload.id || !payload.role) {
             console.error('[Security] Token tidak memiliki payload yang diharapkan.');
             return false;
         }
@@ -154,9 +154,11 @@ export const apiFetch = async (endpoint, options = {}) => {
 
     // --- HANDLER: Token expired ---
     if (response.status === 401) {
-        clearAuthSession();
-        window.location.href = "/login";
-        throw new ApiError("Sesi Anda telah berakhir. Silakan login kembali untuk melanjutkan.");
+        if (!endpoint.includes("/auth/login") && window.location.pathname !== "/login") {
+            clearAuthSession();
+            window.location.href = "/login";
+            throw new ApiError("Sesi Anda telah berakhir. Silakan login kembali untuk melanjutkan.");
+        }
     }
 
     // --- HANDLER: Forbidden (RBAC) ---

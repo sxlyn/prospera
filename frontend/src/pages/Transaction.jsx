@@ -1,4 +1,3 @@
-import React from "react";
 import ErrorMessage from "../components/ErrorMessage"; 
 import TransactionForm from "../components/Transaction/TransactionForm";
 import CartTable from "../components/Transaction/CartTable";

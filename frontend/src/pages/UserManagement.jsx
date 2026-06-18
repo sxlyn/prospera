@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { apiFetch, formatError } from "../utils/api";
 
 // Regex standar industri — selaras dengan backend
-const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+import { EMAIL_REGEX } from "../utils/validators";
 
 export default function UserManagement() {
     const [users, setUsers] = useState([]);

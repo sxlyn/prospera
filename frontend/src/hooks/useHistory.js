@@ -11,7 +11,7 @@
  * - Detail modal transaksi
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { apiFetch, formatError } from "../utils/api";
 import { getTransactionTypeLabel } from "../utils/transactionHelpers";
 
@@ -106,19 +106,22 @@ export function useHistory() {
         setShowTransactionModal(false);
     };
 
-    const filteredHistory = history.filter((tx) => {
-        const matchTab = activeTab === "ALL" || getTransactionTypeLabel(tx) === activeTab;
-        const matchSearch = tx.TransactionDetails?.some(item =>
-            item.Product?.product_name?.toLowerCase().includes(historySearchTerm.toLowerCase())
-        );
-        return matchTab && (historySearchTerm === "" || matchSearch);
-    });
+    // PERFORMANCE FIX (F-S19): Memoize filtered history (O(N×M) computation)
+    const filteredHistory = useMemo(() => {
+        return history.filter((tx) => {
+            const matchTab = activeTab === "ALL" || getTransactionTypeLabel(tx) === activeTab;
+            const matchSearch = tx.TransactionDetails?.some(item =>
+                item.Product?.product_name?.toLowerCase().includes(historySearchTerm.toLowerCase())
+            );
+            return matchTab && (historySearchTerm === "" || matchSearch);
+        });
+    }, [history, activeTab, historySearchTerm]);
 
     return {
         history, loading, fetchError,
         historyPage, historyTotalPages, historyTotalItems, fetchHistory,
         activeTab, setActiveTab,
-        dateFilterType, customStartDate, setCustomStartDate,
+        dateFilterType, setDateFilterType, customStartDate, setCustomStartDate,
         customEndDate, setCustomEndDate,
         isDateMenuOpen, setIsDateMenuOpen,
         historySearchTerm, setHistorySearchTerm,

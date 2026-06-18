@@ -9,6 +9,7 @@ import SmartPredict from './pages/SmartPredict';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Products from './pages/Products';
+import Categories from './pages/Categories';
 import Transaction from './pages/Transaction';
 import UserManagement from './pages/UserManagement';
 
@@ -42,6 +43,7 @@ function App() {
 
                     {/* Protected Routes — Semua role */}
                     <Route path="/products" element={<Protected><Products /></Protected>} />
+                    <Route path="/categories" element={<Protected><Categories /></Protected>} />
                     <Route path="/transaction" element={<Protected><Transaction /></Protected>} />
 
                     {/* Protected Routes — Owner only */}

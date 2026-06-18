@@ -24,6 +24,14 @@ module.exports = (sequelize, DataTypes) => {
     product_stock: {
       type: DataTypes.INTEGER,
       defaultValue: 0
+    },
+    category_id_fk: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    expired_date: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
     }
   }, {
     tableName: 'Products',
@@ -33,6 +41,7 @@ module.exports = (sequelize, DataTypes) => {
 
   Product.associate = (models) => {
     Product.hasMany(models.TransactionDetail, { foreignKey: 'product_id_fk' });
+    Product.belongsTo(models.Category, { foreignKey: 'category_id_fk' });
   };
 
   return Product;

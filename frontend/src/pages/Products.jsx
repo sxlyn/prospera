@@ -75,7 +75,9 @@ export default function Products() {
       name: product.product_name || product.name || "",
       cost: product.product_cost ?? "",
       price: product.product_price ?? "",
-      stock: product.product_stock ?? ""
+      stock: product.product_stock ?? "",
+      category_id: product.category_id_fk || "",
+      expired_date: product.expired_date || ""
     });
     setMessage("");
     window.scrollTo({ top: 0, behavior: 'smooth' });

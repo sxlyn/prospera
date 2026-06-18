@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatRupiah } from '../../utils/format';
 
 export default function CartTable({
@@ -6,46 +5,51 @@ export default function CartTable({
 }) {
   return (
     <div className="card" style={{ marginBottom: "24px" }}>
-      <h3>Keranjang Transaksi</h3>
+      <h3 style={{ marginTop: 0 }}>Keranjang Belanja</h3>
       {cartItems.length === 0 ? (
-        <p style={{ color: "#6B7280" }}>Belum ada item transaksi.</p>
+        <p className="text-muted">Belum ada item transaksi.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="table-simple" style={{ width: "100%" }}>
             <thead>
-              <tr style={{ textAlign: "left", borderBottom: "2px solid #E5E7EB" }}>
-                <th style={{ padding: "10px" }}>Nama Produk</th>
-                <th style={{ padding: "10px" }}>Quantity</th>
-                <th style={{ padding: "10px" }}>Modal</th>
-                <th style={{ padding: "10px" }}>Harga</th>
-                <th style={{ padding: "10px" }}>Tipe</th>
-                <th style={{ padding: "10px" }}>Datetime</th>
-                <th style={{ padding: "10px" }}>Subtotal</th>
-                <th style={{ padding: "10px" }}></th>
+              <tr style={{ textAlign: "left" }}>
+                <th>Nama Produk</th>
+                <th>Quantity</th>
+                <th>Modal</th>
+                <th>Harga</th>
+                <th>Tipe</th>
+                <th>Datetime</th>
+                <th>Subtotal</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {cartItems.map((item, index) => {
-                // FIX: Subtotal berdasarkan tipe transaksi (selaras dengan backend)
-                const subtotal = item.transactionType === 'buy'
-                  ? item.modal * item.quantity      // Pembelian: pakai harga modal
-                  : item.hargaJual * item.quantity;  // Penjualan: pakai harga jual
-
+                const subTotal = item.transactionType === 'buy'
+                  ? item.modal * item.quantity
+                  : item.hargaJual * item.quantity;
+                  
                 return (
-                  <tr key={`${item.product_id}-${index}`}>
-                    <td style={{ padding: "10px" }}>{item.product_name}</td>
-                    <td style={{ padding: "10px" }}>{item.quantity}</td>
-                    <td style={{ padding: "10px" }}>{formatRupiah(item.modal)}</td>
-                    <td style={{ padding: "10px" }}>{formatRupiah(item.hargaJual)}</td>
-                    <td style={{ padding: "10px" }}>
-                      <span className={`badge ${item.transactionType === "buy" ? "safe" : "low"}`} style={{ padding: "2px 8px", fontSize: "12px" }}>
-                        {item.transactionType === "buy" ? "Buy" : "Sell"}
+                  <tr key={index}>
+                    <td>{item.product_name}</td>
+                    <td>{item.quantity}</td>
+                    <td>{formatRupiah(item.modal)}</td>
+                    <td>{formatRupiah(item.hargaJual)}</td>
+                    <td>
+                      <span className={item.transactionType === "sell" ? "badge safe" : "badge low"}>
+                        {item.transactionType === "sell" ? "Jual" : "Beli"}
                       </span>
                     </td>
-                    <td style={{ padding: "10px" }}>{item.datetime ? new Date(item.datetime).toLocaleString() : "-"}</td>
-                    <td style={{ padding: "10px", fontWeight: "600" }}>{formatRupiah(subtotal)}</td>
-                    <td style={{ padding: "10px" }}>
-                      <button className="button" style={{ background: "#EF4444", color: "white" }} onClick={() => removeItem(index)}>Hapus</button>
+                    <td>{new Date(item.datetime).toLocaleString('id-ID')}</td>
+                    <td className="fw-bold">{formatRupiah(subTotal)}</td>
+                    <td>
+                      <button 
+                        className="button-delete" 
+                        onClick={() => removeItem(index)}
+                        style={{ padding: "4px 8px", fontSize: "12px" }}
+                      >
+                        Hapus
+                      </button>
                     </td>
                   </tr>
                 );
