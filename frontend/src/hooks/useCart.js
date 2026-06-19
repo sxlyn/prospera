@@ -150,6 +150,53 @@ export function useCart(products, fetchProducts, fetchHistory) {
             fetchProducts();
             fetchHistory();
         } catch (error) {
+            if (error.data && error.data.require_pin) {
+                const pin = window.prompt(error.message + "\n\nSilakan masukkan PIN Darurat untuk melanjutkan:");
+                if (pin) {
+                    try {
+                        setSaving(true);
+                        const payload = {
+                            transaction_type: transactionType,
+                            emergency_pin: pin,
+                            items: cartItems.map((item) => ({
+                                product_id: item.product_id,
+                                quantity: item.quantity,
+                                capital_cost: item.modal,
+                                selling_price: item.hargaJual,
+                                transaction_type: item.transactionType
+                            }))
+                        };
+                        const response = await apiFetch("/transactions/checkout", {
+                            method: "POST",
+                            body: JSON.stringify(payload)
+                        });
+
+                        setLastTransaction({
+                            items: [...cartItems],
+                            total: totalAmount,
+                            date: new Date().toLocaleString('id-ID'),
+                            type: transactionType
+                        });
+
+                        setMessage(`Transaksi darurat berhasil! Total belanja: Rp${response.total_belanja}`);
+                        setMessageType("success");
+                        setCartItems([]);
+                        fetchProducts();
+                        fetchHistory();
+                        return;
+                    } catch (retryError) {
+                        setMessageType("danger");
+                        setMessage(formatError(retryError));
+                        return;
+                    } finally {
+                        setSaving(false);
+                    }
+                } else {
+                    setMessageType("warning");
+                    setMessage("Transaksi dibatalkan karena Anda tidak memasukkan PIN Darurat.");
+                    return;
+                }
+            }
             setMessageType("danger");
             setMessage(formatError(error));
         } finally {

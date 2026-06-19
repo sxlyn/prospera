@@ -3,7 +3,7 @@ const { Category, Product } = require('../models');
 // GET /api/categories
 exports.getCategories = async (req, res) => {
   try {
-    const owner_id = req.user.role === 'karyawan' ? req.user.owner_id : req.user.id;
+    const owner_id = req.user.store_id;
     
     const categories = await Category.findAll({
       where: { user_id_fk: owner_id },
@@ -20,7 +20,7 @@ exports.getCategories = async (req, res) => {
 // POST /api/categories
 exports.createCategory = async (req, res) => {
   try {
-    const owner_id = req.user.role === 'karyawan' ? req.user.owner_id : req.user.id;
+    const owner_id = req.user.store_id;
     const { category_name, requires_expired_date } = req.body;
 
     if (!category_name) {
@@ -43,7 +43,7 @@ exports.createCategory = async (req, res) => {
 // PUT /api/categories/:id
 exports.updateCategory = async (req, res) => {
   try {
-    const owner_id = req.user.role === 'karyawan' ? req.user.owner_id : req.user.id;
+    const owner_id = req.user.store_id;
     const { id } = req.params;
     const { category_name, requires_expired_date } = req.body;
 
@@ -72,7 +72,7 @@ exports.updateCategory = async (req, res) => {
 // DELETE /api/categories/:id
 exports.deleteCategory = async (req, res) => {
   try {
-    const owner_id = req.user.role === 'karyawan' ? req.user.owner_id : req.user.id;
+    const owner_id = req.user.store_id;
     const { id } = req.params;
 
     const category = await Category.findOne({

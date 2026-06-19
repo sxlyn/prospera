@@ -73,7 +73,8 @@ const createTransaction = async (req, res, next) => {
         // Tahap 3: Membuat pencatatan struk utama di tabel Transactions
         const newTransaction = await Transaction.create(
             {
-                user_id_fk: userId,
+                user_id_fk: userId, // Ini adalah ID toko (tenant SaaS)
+                cashier_id: req.user.id || req.user.user_id, // Ini adalah ID kasir yang sebenarnya melakukan transaksi
                 total_amount: total_amount,
                 transaction_type: headerTransactionType,
                 transaction_datetime: serverDatetime  // SECURITY: Timestamp dikontrol server

@@ -12,6 +12,7 @@ import Products from './pages/Products';
 import Categories from './pages/Categories';
 import Transaction from './pages/Transaction';
 import UserManagement from './pages/UserManagement';
+import StoreSettings from './pages/StoreSettings';
 
 /**
  * Layout wrapper to conditionally show Sidebar
@@ -51,6 +52,7 @@ function App() {
                     <Route path="/bi-analytics" element={<Protected allowedRoles={['owner']}><BiAnalytics /></Protected>} />
                     <Route path="/smart-predict" element={<Protected allowedRoles={['owner']}><SmartPredict /></Protected>} />
                     <Route path="/user-management" element={<Protected allowedRoles={['owner']}><UserManagement /></Protected>} />
+                    <Route path="/settings" element={<Protected allowedRoles={['owner']}><StoreSettings /></Protected>} />
 
                     {/* Catch all redirect to login */}
                     <Route path="*" element={<Navigate to="/" replace />} />

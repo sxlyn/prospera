@@ -65,6 +65,14 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'owner_id',
       as: 'Owner'
     });
+    // Pengaturan Toko
+    User.hasOne(models.StoreSettings, {
+      foreignKey: 'user_id_fk'
+    });
+    // User (SaaS Tenant) memiliki banyak Transaksi
+    User.hasMany(models.Transaction, {
+      foreignKey: 'user_id_fk'
+    });
   };
 
   return User;

@@ -41,6 +41,7 @@ function Sidebar() {
         { path: '/bi-analytics', label: 'Analitik Bisnis', icon: 'fas fa-chart-bar', roles: ['owner'] },
         { path: '/smart-predict', label: 'Fitur Pintar', icon: 'fas fa-robot', roles: ['owner'] },
         { path: '/user-management', label: 'Kelola User', icon: 'fas fa-users-cog', roles: ['owner'] },
+        { path: '/settings', label: 'Pengaturan Toko', icon: 'fas fa-store', roles: ['owner'] },
     ];
 
     const menu = allMenu.filter(item => !role || item.roles.includes(role));
@@ -53,7 +54,7 @@ function Sidebar() {
     return (
         <>
             <aside className="sidebar d-flex flex-column justify-content-between pb-4">
-                <div>
+                <div className="flex-grow-1 overflow-auto custom-scrollbar" style={{ minHeight: 0 }}>
                     <div className="logo px-2">
                         <i className="fas fa-layer-group"/><span>Prospera</span>
                     </div>

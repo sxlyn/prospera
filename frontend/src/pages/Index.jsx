@@ -2,6 +2,8 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ModalExport from '../components/ModalExport';
 import TrendChart from '../components/TrendChart';
+import SmartExpiryWidget from '../components/SmartExpiryWidget';
+import FraudDetectionWidget from '../components/FraudDetectionWidget';
 import { apiFetch, formatError } from '../utils/api';
 import { formatRupiah } from '../utils/format';
 
@@ -122,6 +124,10 @@ function Index() {
                 </div>
             </div>
             <div className="row g-4">
+                <div className="col-12">
+                    <FraudDetectionWidget />
+                    <SmartExpiryWidget />
+                </div>
                 <div className="col-lg-4 col-md-5">
                     <div className="mb-3">
                         <div className="d-flex justify-content-between align-items-center mb-2">

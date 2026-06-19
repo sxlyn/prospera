@@ -39,9 +39,9 @@ const verifyToken = (req, res, next) => {
         req.user = decoded; 
         
         // ISOLASI DATA SaaS: Hitung store_id
-        // Owner = Tokonya sendiri (menggunakan id-nya sendiri)
-        // Karyawan = Toko milik owner-nya (menggunakan owner_id-nya)
-        req.user.store_id = decoded.role === 'owner' ? decoded.id : decoded.owner_id;
+        const userId = decoded.id || decoded.user_id || decoded.userId;
+        const userRole = decoded.role ? decoded.role.toLowerCase() : 'owner';
+        req.user.store_id = userRole === 'owner' ? userId : (decoded.owner_id || userId);
         
         // 6. Izinkan masuk ke rute tujuan (Controller)
         next(); 

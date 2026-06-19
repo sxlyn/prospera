@@ -9,6 +9,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    cashier_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
     total_amount: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -39,6 +43,8 @@ module.exports = (sequelize, DataTypes) => {
 
   Transaction.associate = (models) => {
     Transaction.hasMany(models.TransactionDetail, { foreignKey: 'transaction_id_fk' });
+    Transaction.belongsTo(models.User, { foreignKey: 'user_id_fk' });
+    Transaction.belongsTo(models.User, { foreignKey: 'cashier_id', as: 'Cashier' });
   };
 
   return Transaction;

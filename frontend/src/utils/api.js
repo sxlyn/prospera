@@ -111,9 +111,10 @@ export const isTokenValid = () => {
  * dari runtime JS error (raw technical error).
  */
 export class ApiError extends Error {
-    constructor(message) {
+    constructor(message, data = null) {
         super(message);
         this.name = "ApiError";
+        this.data = data;
     }
 }
 
@@ -161,11 +162,14 @@ export const apiFetch = async (endpoint, options = {}) => {
         }
     }
 
-    // --- HANDLER: Forbidden (RBAC) ---
+    // --- HANDLER: Forbidden (RBAC / Time Access) ---
     if (response.status === 403) {
         const data = await response.json().catch(() => ({}));
         console.error(`[API 403 Forbidden] at ${endpoint}:`, data);
-        throw new ApiError("Anda tidak memiliki hak akses untuk fitur ini.");
+        if (data.require_pin) {
+            throw new ApiError(data.message || "Toko tutup. Masukkan PIN.", data);
+        }
+        throw new ApiError("Anda tidak memiliki hak akses untuk fitur ini.", data);
     }
 
     // --- HANDLER: Rate Limit Exceeded ---
@@ -256,6 +260,40 @@ export const formatError = (error) => {
     // Log raw JS error untuk keperluan debugging developer
     console.error("[Runtime UI Error]:", error);
     return "Terjadi kendala teknis internal. Silakan muat ulang (refresh) halaman.";
+};
+
+// --- SMART FEATURES API ---
+export const getExpiringProducts = async () => {
+    return await apiFetch('/smart-features/expiring', {
+        method: 'GET'
+    });
+};
+
+export const applyMarkdown = async (product_id, new_price) => {
+    return await apiFetch('/smart-features/apply-markdown', {
+        method: 'PUT',
+        body: JSON.stringify({ product_id, new_price })
+    });
+};
+
+export const getAnomalies = async () => {
+    return await apiFetch('/smart-features/anomalies', {
+        method: 'GET'
+    });
+};
+
+// --- STORE SETTINGS API ---
+export const getStoreSettings = async () => {
+    return await apiFetch('/store-settings', {
+        method: 'GET'
+    });
+};
+
+export const updateStoreSettings = async (settings) => {
+    return await apiFetch('/store-settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings)
+    });
 };
 
 export default API_BASE_URL;

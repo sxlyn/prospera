@@ -33,12 +33,12 @@ body {
     width: var(--sidebar-width);
     background: linear-gradient(180deg, var(--blue-primary) 0%, var(--green-medium) 100%);
     color: white;
-    min-height: 100vh;
+    height: 100vh;
     position: fixed;
     left: 0;
     top: 0;
     z-index: 1000;
-    padding: 2rem 1.25rem;
+    padding: 1.5rem 1.25rem;
 }
 
 .sidebar .nav-link {
