@@ -22,10 +22,28 @@ const getAllProducts = async (req, res, next) => {
             }]
         });
 
+        const productIds = rows.map(p => p.product_id);
+        const productDataMap = {};
+        rows.forEach(p => {
+            productDataMap[p.product_id] = {
+                product_stock: p.product_stock,
+                createdAt: p.createdAt,
+                deletedAt: p.deletedAt
+            };
+        });
+
+        const { calculateRestockForProducts } = require('../services/aiRestockService');
+        const restockSuggestions = await calculateRestockForProducts(userId, productIds, productDataMap);
+
         // Terapkan fungsi dari Shared Helper ke setiap produk
         const productsWithStatus = rows.map(p => {
             const productData = p.toJSON();
             productData.stock_status = getStockStatus(productData.product_stock); 
+            
+            const aiData = restockSuggestions[productData.product_id] || { suggested_restock: 0, velocity: 0 };
+            productData.suggested_restock = aiData.suggested_restock;
+            productData.velocity = aiData.velocity; // Tambahkan untuk XAI
+            
             return productData;
         });
 

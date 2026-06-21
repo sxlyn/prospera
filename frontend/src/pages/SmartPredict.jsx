@@ -106,6 +106,25 @@ function SmartPredict() {
                 </div> {/* End Right Column */}
 
                 <div className="col-12">
+                    {/* Explainable AI (XAI) Banner - Human Centric */}
+                    <div className="alert alert-success d-flex align-items-center mb-4 border-0 shadow-sm" style={{ backgroundColor: '#ecfdf5', color: '#065f46' }}>
+                        <i className="bi bi-check-circle-fill fs-3 me-3"></i>
+                        <div>
+                            <h6 className="fw-bold mb-1">Kondisi Stok Terkendali</h6>
+                            {(() => {
+                                const total = data.allProducts.length;
+                                const restockList = data.allProducts.filter(item => (item.suggested_restock || 0) > 0);
+                                const count = restockList.length;
+                                const safeCount = total - count;
+                                return (
+                                    <span className="small">
+                                        {safeCount} dari {total} produk Anda dalam kondisi aman. Berikut adalah {count} produk yang perlu segera di-restock agar rak pajangan tidak kosong.
+                                    </span>
+                                );
+                            })()}
+                        </div>
+                    </div>
+
                     <div className="clean-card shadow-sm mb-4">
                         <h6 className="fw-bold mb-4"><span className="badge bg-primary me-2">Stok</span>Saran Pembelian Stok (Restock)</h6>
                         <div className="table-responsive" style={{ maxHeight: "400px", overflowY: "auto" }}>
@@ -115,13 +134,13 @@ function SmartPredict() {
                                         <th>Nama Barang</th>
                                         <th>Stok Saat Ini</th>
                                         <th>Saran Restock</th>
+                                        <th>Keterangan</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {(data.allProducts.length > 0 ? data.allProducts : []).map((item) => {
-                                        // Rumus dinamis mengikuti ambang batas dari backend (misal: 30)
-                                        const needsRestock = item.product_stock <= safetyStock;
-                                        const perluDipesan = needsRestock ? (safetyStock * 2) - item.product_stock : 0;
+                                        // Murni menggunakan saran dari Backend AI Restock Service
+                                        const perluDipesan = item.suggested_restock || 0;
                                         
                                         if (perluDipesan <= 0) return null;
                                         
@@ -133,6 +152,13 @@ function SmartPredict() {
                                                     <span className="text-primary fw-bold">
                                                         +{perluDipesan} unit
                                                     </span>
+                                                </td>
+                                                <td className="text-muted" style={{ fontSize: "0.85rem" }}>
+                                                    {item.velocity > 0 ? (
+                                                        <>Barang laku keras! Rata-rata terjual <strong>{parseFloat(item.velocity).toFixed(1)} unit/hari</strong>. AI menyarankan restock <strong>{perluDipesan} unit</strong> untuk mengamankan persediaan ke depan.</>
+                                                    ) : (
+                                                        <>Barang ini jarang terjual (Rata-rata 0 unit/hari), namun stok saat ini (<strong>{item.product_stock} unit</strong>) berada di bawah standar pajangan rak. AI menyarankan restock hingga mencapai target display (<strong>{item.product_stock + perluDipesan} unit</strong>).</>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );

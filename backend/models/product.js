@@ -32,6 +32,16 @@ module.exports = (sequelize, DataTypes) => {
     expired_date: {
       type: DataTypes.DATEONLY,
       allowNull: true
+    },
+    min_display_qty: {
+      type: DataTypes.INTEGER,
+      defaultValue: 5,
+      allowNull: false
+    },
+    calculated_reorder_point: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false
     }
   }, {
     tableName: 'Products',

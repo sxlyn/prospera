@@ -103,6 +103,11 @@ const PORT = process.env.PORT || 5000;
 sequelize.authenticate()
     .then(() => {
         console.log('Koneksi ke basis data MySQL (Sequelize) berhasil didirikan.');
+        
+        // Memulai Background Jobs (Cron)
+        const { startCronJobs } = require('./jobs/cronJobs');
+        startCronJobs();
+
         const server = app.listen(PORT, () => {
             console.log(`Server Node.js berjalan pada port ${PORT}`);
             console.log(`Helmet aktif | CORS dibatasi ke: ${CORS_ORIGIN}`);

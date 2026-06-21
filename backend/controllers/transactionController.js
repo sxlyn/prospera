@@ -94,7 +94,10 @@ const createTransaction = async (req, res, next) => {
             transaction_type: vItem.transaction_type
         }));
 
-        await TransactionDetail.bulkCreate(detailRecords, { transaction: t });
+        await TransactionDetail.bulkCreate(detailRecords, { 
+            transaction: t, 
+            individualHooks: true 
+        });
 
         // Tahap 5: Update stok produk (tetap per-item karena row-level lock diperlukan)
         // PERFORMANCE FIX (B-S10): Menggunakan Promise.all untuk paralelisasi

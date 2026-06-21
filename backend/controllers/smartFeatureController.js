@@ -89,90 +89,135 @@ exports.getAnomalies = async (req, res) => {
         const ownerId = req.user.store_id || req.user.id || req.user.user_id;
         
         if (!ownerId) {
-            console.error('CRITICAL ERROR: ownerId is undefined! req.user payload:', req.user);
-            return res.status(401).json({ message: "Sesi Anda bermasalah (ID Toko tidak ditemukan). Silakan logout dan login kembali." });
+            return res.status(401).json({ message: "Sesi Anda bermasalah (ID Toko tidak ditemukan)." });
         }
         
-        const { StoreSettings, Transaction, TransactionDetail, User, Product } = require('../models');
+        const { AnomalyTicket, Transaction, TransactionDetail, User, Product } = require('../models');
+        const moment = require('moment-timezone');
 
-        const settings = await StoreSettings.findOne({ where: { user_id_fk: ownerId } });
-        const thirtyDaysAgo = moment().subtract(30, 'days').toDate();
-        
-        const transactions = await Transaction.findAll({
+        // Mengambil semua tiket anomali yang bukan DISMISSED, karena DISMISSED artinya void/cancel
+        const tickets = await AnomalyTicket.findAll({
             where: {
                 user_id_fk: ownerId,
-                transaction_datetime: { [Op.gte]: thirtyDaysAgo }
+                status: ['OPEN', 'RESOLVED']
             },
             include: [
                 {
+                    model: Transaction,
+                    as: 'TransactionRef',
+                    include: [
+                        { model: User, as: 'Cashier', attributes: ['username'] },
+                        { model: TransactionDetail, include: [{ model: Product, attributes: ['product_name'] }] }
+                    ]
+                },
+                {
                     model: TransactionDetail,
-                    include: [{ model: Product, attributes: ['product_name'] }]
+                    as: 'DetailRef',
+                    include: [
+                        { model: Product, attributes: ['product_name'] },
+                        { model: Transaction, include: [{ model: User, as: 'Cashier', attributes: ['username'] }] }
+                    ]
                 },
                 {
                     model: User,
-                    as: 'Cashier',
-                    attributes: ['username', 'role']
+                    as: 'Resolver',
+                    attributes: ['username']
                 }
             ],
-            order: [['transaction_datetime', 'DESC']]
+            order: [['createdAt', 'DESC']]
         });
 
         const timeAnomalies = [];
         const priceAnomalies = [];
 
-        transactions.forEach(trx => {
-            // Anomali Waktu (Jika settings ada & kasir yang melakukan)
-            if (settings && trx.Cashier && trx.Cashier.role !== 'owner') {
-                const trxTime = moment(trx.transaction_datetime).tz('Asia/Jakarta').format('HH:mm:ss');
-                const openHour = settings.open_hour;
-                const closeMoment = moment.tz(`1970-01-01 ${settings.close_hour}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Jakarta');
-                closeMoment.add(settings.grace_period_minutes, 'minutes');
-                const closeHourWithGrace = closeMoment.format('HH:mm:ss');
+        tickets.forEach(ticket => {
+            if (ticket.anomaly_type === 'TIME' && ticket.TransactionRef) {
+                const trx = ticket.TransactionRef;
+                const products = trx.TransactionDetails ? trx.TransactionDetails.map(d => `${d.Product ? d.Product.product_name : 'Produk Dihapus'} (x${d.quantity})`).join(', ') : '';
+                timeAnomalies.push({
+                    ticket_id: ticket.ticket_id,
+                    transaction_id: trx.transaction_id,
+                    datetime: trx.transaction_datetime,
+                    total_amount: trx.total_amount,
+                    products: products,
+                    cashier: trx.Cashier ? trx.Cashier.username : 'Unknown',
+                    time: moment(trx.transaction_datetime).tz('Asia/Jakarta').format('HH:mm:ss'),
+                    reason: ticket.description,
+                    status: ticket.status,
+                    resolution_note: ticket.resolution_note,
+                    resolved_at: ticket.resolved_at,
+                    resolved_by: ticket.Resolver ? ticket.Resolver.username : null
+                });
+            } else if (ticket.anomaly_type === 'PRICE' && ticket.DetailRef) {
+                const detail = ticket.DetailRef;
+                const trx = detail.Transaction;
+                const margin = detail.selling_price - detail.capital_cost;
+                const marginPercentage = (margin / detail.capital_cost) * 100;
 
-                let isOutsideHours = false;
-                if (openHour <= closeHourWithGrace) {
-                    isOutsideHours = trxTime < openHour || trxTime > closeHourWithGrace;
-                } else {
-                    isOutsideHours = trxTime < openHour && trxTime > closeHourWithGrace;
-                }
-
-                if (isOutsideHours) {
-                    timeAnomalies.push({
-                        transaction_id: trx.transaction_id,
-                        datetime: trx.transaction_datetime,
-                        cashier: trx.Cashier ? trx.Cashier.username : 'Unknown',
-                        time: trxTime,
-                        reason: `Di luar jam operasional (${openHour} - ${closeHourWithGrace})`
-                    });
-                }
+                priceAnomalies.push({
+                    ticket_id: ticket.ticket_id,
+                    transaction_id: trx ? trx.transaction_id : null,
+                    datetime: trx ? trx.transaction_datetime : null,
+                    cashier: (trx && trx.Cashier) ? trx.Cashier.username : 'Unknown',
+                    product: detail.Product ? detail.Product.product_name : 'Produk Dihapus',
+                    quantity: detail.quantity,
+                    capital_cost: detail.capital_cost,
+                    selling_price: detail.selling_price,
+                    margin_percentage: marginPercentage.toFixed(2),
+                    reason: ticket.description,
+                    status: ticket.status,
+                    resolution_note: ticket.resolution_note,
+                    resolved_at: ticket.resolved_at,
+                    resolved_by: ticket.Resolver ? ticket.Resolver.username : null
+                });
             }
-
-            // Anomali Harga (Margin <= 2%)
-            trx.TransactionDetails.forEach(detail => {
-                if (detail.transaction_type === 'sell' && detail.capital_cost > 0) {
-                    const margin = detail.selling_price - detail.capital_cost;
-                    const marginPercentage = (margin / detail.capital_cost) * 100;
-                    
-                    if (marginPercentage <= 2) {
-                        priceAnomalies.push({
-                            transaction_id: trx.transaction_id,
-                            datetime: trx.transaction_datetime,
-                            cashier: trx.Cashier ? trx.Cashier.username : 'Unknown',
-                            product: detail.Product ? detail.Product.product_name : 'Produk Dihapus',
-                            quantity: detail.quantity,
-                            capital_cost: detail.capital_cost,
-                            selling_price: detail.selling_price,
-                            margin_percentage: marginPercentage.toFixed(2),
-                            reason: `Margin sangat tipis atau jual rugi (${marginPercentage.toFixed(2)}%)`
-                        });
-                    }
-                }
-            });
         });
 
         res.status(200).json({ timeAnomalies, priceAnomalies });
     } catch (error) {
         console.error("Error fetching anomalies:", error);
         res.status(500).json({ message: "Gagal mengambil data anomali." });
+    }
+};
+
+exports.resolveAnomaly = async (req, res) => {
+    try {
+        const ownerId = req.user.store_id || req.user.id || req.user.user_id;
+        const resolverId = req.user.id || req.user.user_id; // id user yang sedang login
+        const { ticket_id, status, resolution_note } = req.body;
+
+        if (!ownerId) {
+            return res.status(401).json({ message: "Sesi Anda bermasalah (ID Toko tidak ditemukan)." });
+        }
+
+        if (!ticket_id || !status || !['RESOLVED', 'DISMISSED'].includes(status)) {
+            return res.status(400).json({ message: "Data tidak valid atau status tidak dikenali." });
+        }
+
+        const { AnomalyTicket } = require('../models');
+
+        const ticket = await AnomalyTicket.findOne({
+            where: { ticket_id: ticket_id, user_id_fk: ownerId }
+        });
+
+        if (!ticket) {
+            return res.status(404).json({ message: "Tiket anomali tidak ditemukan." });
+        }
+
+        if (ticket.status !== 'OPEN') {
+            return res.status(400).json({ message: "Tiket anomali sudah ditutup." });
+        }
+
+        await ticket.update({
+            status: status,
+            resolution_note: resolution_note || null,
+            resolved_at: new Date(),
+            resolved_by: resolverId
+        });
+
+        res.status(200).json({ message: "Kasus anomali berhasil ditutup.", ticket });
+    } catch (error) {
+        console.error("Error resolving anomaly:", error);
+        res.status(500).json({ message: "Gagal memproses penyelesaian anomali." });
     }
 };

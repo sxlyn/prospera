@@ -142,7 +142,9 @@ function BiAnalytics() {
                 <div className="col-lg-4 col-md-5">
                     {/* --- SUMMARY PENJUALAN --- */}
                     <div className="mb-4">
-                        <span className="badge bg-secondary mb-2">Sales Summary</span>
+                        <div className="mt-2">
+                            <span className="badge bg-secondary mb-2">Sales Summary</span>
+                        </div>
                         
                         {/* KARTU TOTAL PENDAPATAN (Sekarang Statis / Non-clickable) */}
                         <div className="stat-card bi-card shadow-sm mb-2 bg-white rounded border-0">
@@ -175,9 +177,13 @@ function BiAnalytics() {
                             </div>
                         </div>
 
+                    </div>
+
+                    <div className="mb-4">
+                        <span className="badge bg-danger bg-opacity-75 mb-2">Risk Management</span>
                         {/* KARTU KERUGIAN */}
                         <div 
-                            className="stat-card bi-card shadow-sm mt-3 bg-white rounded border-0"
+                            className="stat-card bi-card shadow-sm bg-white rounded border-0"
                             style={{ cursor: 'pointer', transition: '0.2s' }}
                             onClick={() => openModal('loss')}
                             onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
@@ -266,7 +272,14 @@ function BiAnalytics() {
                                                 <td className="text-end text-success fw-bold">{formatRupiah(item.laba)}</td>
                                             </tr>
                                         )) : (
-                                            <tr><td colSpan="4" className="text-center text-muted py-4">Belum ada data penjualan.</td></tr>
+                                            <tr>
+                                                <td colSpan="4" className="text-center py-5">
+                                                    <div className="mb-3"><i className="fas fa-chart-pie text-muted opacity-50" style={{ fontSize: '3rem' }}></i></div>
+                                                    <h6 className="fw-bold text-dark">Tidak Ada Data Penjualan</h6>
+                                                    <p className="text-muted small mb-3">Sistem belum dapat menyusun performa barang.</p>
+                                                    <button onClick={() => window.location.href='/transaction'} className="btn btn-outline-primary btn-sm px-4 rounded-pill">Lihat Transaksi</button>
+                                                </td>
+                                            </tr>
                                         )}
                                     </tbody>
                                 </table>
@@ -280,8 +293,16 @@ function BiAnalytics() {
                                 <h5 className="fw-bold"><span className="badge bg-info me-2">Tren</span>Grafik Penjualan & Laba</h5>
                                 <small className="text-muted">Menampilkan perbandingan total omzet dan untung bersih dari bulan ke bulan.</small>
                             </div>
-                            <div className="chart-container" style={{ minHeight: '350px' }}>
-                                <TrendChart labels={trend.labels} sales={trend.data} profit={trend.laba} salesLabel="Penjualan" />
+                            <div className="chart-container position-relative" style={{ minHeight: '350px' }}>
+                                {ringkasan.transaksi > 0 ? (
+                                    <TrendChart labels={trend.labels} sales={trend.data} profit={trend.laba} salesLabel="Penjualan" />
+                                ) : (
+                                    <div className="d-flex flex-column justify-content-center align-items-center h-100 bg-light rounded text-center p-4" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                                        <i className="fas fa-chart-area text-muted opacity-50 mb-3" style={{ fontSize: '3rem' }}></i>
+                                        <h6 className="fw-bold text-dark">Grafik Belum Tersedia</h6>
+                                        <p className="text-muted small mb-0">Tren penjualan akan tergambar setelah<br/>transaksi masuk ke sistem.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

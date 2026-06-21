@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Protected from './components/Protected';
+import TourGuide from './components/TourGuide';
 
 // Pages
 import Index from './pages/Index';
@@ -25,6 +26,7 @@ const Layout = ({ children }) => {
     return (
         <>
             {showSidebar && <Sidebar />}
+            {showSidebar && <TourGuide />}
             <main className={showSidebar ? "main-content" : ""}>
                 {children}
             </main>

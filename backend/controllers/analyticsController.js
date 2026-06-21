@@ -121,6 +121,7 @@ const getTopProduct = async (req, res, next) => {
         const { startDate, endDate, limit } = req.query;
         const userId = req.user.store_id;
 
+        // 1. Dapatkan Top Products berdasarkan filter UI
         const rows = await TransactionDetail.findAll({
             attributes: [
                 [fn("SUM", col("quantity")), "sold"],
@@ -128,28 +129,55 @@ const getTopProduct = async (req, res, next) => {
                 [literal("SUM((selling_price - capital_cost) * quantity)"), "laba"]
             ],
             include: [
-                { model: Product, attributes: ["product_name"], required: true, paranoid: false },
+                // paranoid: false agar barang dihapus tetap muncul laporannya, tapi kita butuh deletedAt untuk disaring
+                { model: Product, attributes: ["product_name", "product_stock", "createdAt", "deletedAt"], required: true, paranoid: false },
                 { model: Transaction, attributes: [], where: { ...getDateFilter(startDate, endDate), user_id_fk: userId, status: 'success' } }
             ],
             where: { transaction_type: 'sell' },
-            group: ["Product.product_id", "Product.product_name"],
+            group: ["Product.product_id", "Product.product_name", "Product.product_stock", "Product.createdAt", "Product.deletedAt"],
             order: [[literal("sold"), "DESC"]],
             limit: sanitizeLimit(limit),
             raw: true
         });
 
+        // 2. Ambil ID produk untuk sub-query 30 hari absolut
+        const productIds = rows.map(r => r["Product.product_id"]);
+
+        // Create a productMap for the service
+        const productDataMap = {};
+        rows.forEach(r => {
+            productDataMap[r["Product.product_id"]] = {
+                product_stock: r["Product.product_stock"],
+                createdAt: r["Product.createdAt"],
+                deletedAt: r["Product.deletedAt"]
+            };
+        });
+
+        // 3. Panggil Otak AI terpusat
+        const { calculateRestockForProducts } = require('../services/aiRestockService');
+        const restockSuggestions = await calculateRestockForProducts(userId, productIds, productDataMap);
+
+        // 4. Map final
         res.json(rows.map(item => {
+            const productId = item["Product.product_id"];
             const revenue = parseFloat(item.revenue) || 0;
             const laba = parseFloat(item.laba) || 0;
             const margin = revenue > 0 ? ((laba / revenue) * 100).toFixed(1) : 0;
+            const sold = parseInt(item.sold) || 0; // Sold in UI Filter
+            const currentStock = parseInt(item["Product.product_stock"]) || 0;
+            
+            const aiData = restockSuggestions[productId] || { suggested_restock: 0, stock_on_order: 0, velocity: 0 };
             
             return {
-                product_id: item["Product.product_id"],
+                product_id: productId,
                 product_name: item["Product.product_name"],
-                sold: parseInt(item.sold) || 0,
-                revenue: revenue,
-                laba: laba,
-                margin: `${margin}%` 
+                sold,
+                revenue,
+                laba,
+                margin: `${margin}%`,
+                current_stock: currentStock,
+                stock_on_order: aiData.stock_on_order,
+                suggested_restock: aiData.suggested_restock
             };
         }));
     } catch (error) {

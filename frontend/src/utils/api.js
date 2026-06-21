@@ -282,6 +282,13 @@ export const getAnomalies = async () => {
     });
 };
 
+export const resolveAnomaly = async (payload) => {
+    return await apiFetch('/smart-features/anomalies/resolve', {
+        method: 'PUT',
+        body: payload
+    });
+};
+
 // --- STORE SETTINGS API ---
 export const getStoreSettings = async () => {
     return await apiFetch('/store-settings', {

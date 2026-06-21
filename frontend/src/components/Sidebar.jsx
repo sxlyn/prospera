@@ -51,6 +51,15 @@ function Sidebar() {
         navigate('/login');
     };
 
+    const replayTour = () => {
+        localStorage.removeItem('tourCompleted');
+        if (window.location.pathname !== '/dashboard') {
+            navigate('/dashboard');
+        } else {
+            window.dispatchEvent(new Event('replayTour'));
+        }
+    };
+
     return (
         <>
             <aside className="sidebar d-flex flex-column justify-content-between pb-4">
@@ -87,6 +96,7 @@ function Sidebar() {
                                 <NavLink 
                                     to={item.path} 
                                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                                    data-tour={item.path === '/products' ? 'tour-products' : item.path === '/transaction' ? 'tour-transactions' : null}
                                 >
                                     <i className={item.icon} />
                                     <span className="nav-text">{item.label}</span>
@@ -96,7 +106,15 @@ function Sidebar() {
                     </ul>
                 </div>
                 
-                <div className="px-3">
+                <div className="px-3 mt-auto pt-3 border-top">
+                    <button 
+                        onClick={replayTour}
+                        className="nav-link w-100 border-0 bg-transparent text-start mb-2"
+                        style={{ cursor: 'pointer' }}
+                    >
+                        <i className="fas fa-play-circle" />
+                        <span className="nav-text">Ulangi Panduan</span>
+                    </button>
                     <button 
                         onClick={() => setShowPasswordModal(true)}
                         className="nav-link w-100 border-0 bg-transparent text-start mb-2"
