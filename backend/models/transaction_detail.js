@@ -36,7 +36,15 @@ module.exports = (sequelize, DataTypes) => {
     }
   }, {
     tableName: 'Transaction_details',
-    timestamps: false
+    timestamps: false,
+    // FIX (HIGH-09): Index untuk JOIN dan analytics queries.
+    // product_id_fk di-JOIN pada setiap query analytics breakdown produk.
+    // transaction_id_fk di-JOIN pada setiap eager load history detail.
+    indexes: [
+      { fields: ['transaction_id_fk'] },             // JOIN dari Transaction → Detail
+      { fields: ['product_id_fk'] },                 // JOIN dari Detail → Product (analytics)
+      { fields: ['transaction_type'] }               // Filter sell/buy di analytics
+    ]
   });
 
   TransactionDetail.associate = (models) => {
@@ -76,25 +84,48 @@ module.exports = (sequelize, DataTypes) => {
   };
 
   TransactionDetail.addHook('afterCreate', async (detail, options) => {
+    // syncProductAI adalah fire-and-forget (tidak di-await) — sudah safe
     const { syncProductAI } = require('../services/aiRestockService');
     syncProductAI(detail.product_id_fk);
-    await checkPriceAnomaly(detail, options);
+    // FIX (MEDIUM-11): Bungkus dengan try-catch agar hook failure tidak abort transaksi utama
+    try {
+        await checkPriceAnomaly(detail, options);
+    } catch (hookErr) {
+        console.error('[Hook] afterCreate checkPriceAnomaly gagal (non-fatal):', {
+            detail_id: detail.detail_id,
+            error: hookErr.message
+        });
+    }
   });
 
   TransactionDetail.addHook('afterUpdate', async (detail, options) => {
-    if (detail.changed('quantity') || detail.changed('transaction_type')) {
-        const { syncProductAI } = require('../services/aiRestockService');
-        syncProductAI(detail.product_id_fk);
+    try {
+        if (detail.changed('quantity') || detail.changed('transaction_type')) {
+            const { syncProductAI } = require('../services/aiRestockService');
+            syncProductAI(detail.product_id_fk);
+        }
+        await checkPriceAnomaly(detail, options);
+    } catch (hookErr) {
+        console.error('[Hook] afterUpdate checkPriceAnomaly gagal (non-fatal):', {
+            detail_id: detail.detail_id,
+            error: hookErr.message
+        });
     }
-    await checkPriceAnomaly(detail, options);
   });
 
   TransactionDetail.addHook('afterDestroy', async (detail, options) => {
-      const { AnomalyTicket } = sequelize.models;
-      await AnomalyTicket.update({ status: 'DISMISSED', resolution_note: 'Sistem: Detail Transaksi telah di-Void/Dihapus' }, {
-          where: { reference_id: detail.detail_id, anomaly_type: 'PRICE', status: 'OPEN' },
-          transaction: options.transaction
-      });
+      try {
+          const { AnomalyTicket } = sequelize.models;
+          await AnomalyTicket.update({ status: 'DISMISSED', resolution_note: 'Sistem: Detail Transaksi telah di-Void/Dihapus' }, {
+              where: { reference_id: detail.detail_id, anomaly_type: 'PRICE', status: 'OPEN' },
+              transaction: options.transaction
+          });
+      } catch (hookErr) {
+          console.error('[Hook] afterDestroy AnomalyTicket update gagal (non-fatal):', {
+              detail_id: detail.detail_id,
+              error: hookErr.message
+          });
+      }
   });
 
   return TransactionDetail;

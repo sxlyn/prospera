@@ -1,4 +1,4 @@
-import { formatRupiah } from '../../utils/format';
+import { formatRupiah, formatDatetime } from '../../utils/format';
 
 export default function CartTable({
   cartItems, removeItem, setCartItems, saveTransaction, saving, totalAmount
@@ -15,8 +15,8 @@ export default function CartTable({
               <tr style={{ textAlign: "left" }}>
                 <th>Nama Produk</th>
                 <th>Quantity</th>
-                <th>Modal</th>
-                <th>Harga</th>
+                <th>Total Modal</th>
+                <th>Total Harga</th>
                 <th>Tipe</th>
                 <th>Datetime</th>
                 <th>Subtotal</th>
@@ -33,14 +33,14 @@ export default function CartTable({
                   <tr key={index}>
                     <td>{item.product_name}</td>
                     <td>{item.quantity}</td>
-                    <td>{formatRupiah(item.modal)}</td>
-                    <td>{formatRupiah(item.hargaJual)}</td>
+                    <td>{formatRupiah(item.modal * item.quantity)}</td>
+                    <td>{formatRupiah(item.hargaJual * item.quantity)}</td>
                     <td>
                       <span className={item.transactionType === "sell" ? "badge safe" : "badge low"}>
                         {item.transactionType === "sell" ? "Jual" : "Beli"}
                       </span>
                     </td>
-                    <td>{new Date(item.datetime).toLocaleString('id-ID')}</td>
+                    <td>{formatDatetime(item.datetime)}</td>
                     <td className="fw-bold">{formatRupiah(subTotal)}</td>
                     <td>
                       <button 

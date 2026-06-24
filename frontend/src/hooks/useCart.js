@@ -11,6 +11,8 @@
 
 import { useState, useMemo } from "react";
 import { apiFetch, formatError } from "../utils/api";
+import { formatDatetime } from "../utils/format";
+import useDebounce from "./useDebounce";
 
 export function useCart(products, fetchProducts, fetchHistory) {
     const [cartItems, setCartItems] = useState([]);
@@ -26,10 +28,16 @@ export function useCart(products, fetchProducts, fetchHistory) {
 
     const [lastTransaction, setLastTransaction] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [overtimeModal, setOvertimeModal] = useState({ isOpen: false, errorMsg: '' });
 
     // Pencarian produk
     const [searchTerm, setSearchTerm] = useState("");
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    // FIX (HIGH-07): Debounce search term — filter hanya berjalan setelah user
+    // berhenti mengetik selama 300ms. Input sendiri tetap update real-time.
+    // Mencegah re-render berlebihan pada daftar ratusan produk.
+    const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
     // PERFORMANCE FIX (F-S19): Memoize derived state
     const selectedProduct = useMemo(() => 
@@ -38,9 +46,11 @@ export function useCart(products, fetchProducts, fetchHistory) {
     );
 
     // PERFORMANCE FIX (F-S19): Memoize filtered list
+    // Menggunakan debouncedSearchTerm (bukan searchTerm) agar filter tidak berjalan
+    // di setiap keystroke — hanya setelah user berhenti mengetik 300ms.
     const filteredProducts = useMemo(() => 
-        products.filter((p) => p.product_name.toLowerCase().includes(searchTerm.toLowerCase())),
-        [products, searchTerm]
+        products.filter((p) => p.product_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())),
+        [products, debouncedSearchTerm]
     );
 
     // FIX: Hitung total berdasarkan tipe transaksi (selaras dengan backend)
@@ -65,6 +75,11 @@ export function useCart(products, fetchProducts, fetchHistory) {
             setMessageType("warning");
             return;
         }
+        if (qty > 1000) {
+            setMessage("Kuantitas transaksi tidak wajar (melebihi 1000 unit). Silakan pisahkan transaksi atau hubungi manajer.");
+            setMessageType("danger");
+            return;
+        }
         const mod = Number(modal);
         if (isNaN(mod) || mod < 0) {
             setMessage("Pastikan nominal modal terisi dengan benar (angka non-negatif).");
@@ -84,18 +99,38 @@ export function useCart(products, fetchProducts, fetchHistory) {
             return;
         }
 
-        setCartItems((current) => [
-            ...current,
-            {
-                product_id: selectedProduct.product_id,
-                product_name: selectedProduct.product_name,
-                quantity: qty,
-                modal: mod,
-                hargaJual: harga,
-                transactionType: transactionType,
-                datetime: datetime || ""
+        setCartItems((current) => {
+            const existingIndex = current.findIndex(
+                (item) => item.product_id === selectedProduct.product_id && item.transactionType === transactionType
+            );
+
+            const validDatetime = datetime ? new Date(datetime).toISOString() : new Date().toISOString();
+
+            if (existingIndex >= 0) {
+                    // FIX (HIGH-FE-01): Gunakan .map() + object spread untuk update immutable.
+                    // Sebelumnya: [...current] hanya shallow copy array — elemen masih reference
+                    // objek lama, sehingga updated[idx].quantity = ... adalah MUTASI LANGSUNG.
+                    // Ini melanggar React immutability dan bisa menyebabkan bug di Concurrent Mode.
+                    return current.map((item, idx) =>
+                        idx === existingIndex
+                            ? { ...item, quantity: Number(item.quantity) + Number(qty), ...(datetime ? { datetime: validDatetime } : {}) }
+                            : item
+                    );
             }
-        ]);
+
+            return [
+                ...current,
+                {
+                    product_id: selectedProduct.product_id,
+                    product_name: selectedProduct.product_name,
+                    quantity: Number(qty),
+                    modal: Number(mod),
+                    hargaJual: Number(harga),
+                    transactionType: transactionType,
+                    datetime: validDatetime
+                }
+            ];
+        });
 
         setSelectedProductId("");
         setSearchTerm("");
@@ -131,8 +166,14 @@ export function useCart(products, fetchProducts, fetchHistory) {
                 }))
             };
 
+            // FIX (CRITICAL-03): Generate UUID idempotency key per checkout attempt.
+            // Backend akan menolak request duplikat dengan key yang sama dalam 5 menit.
+            // Key baru = checkout baru yang sah (user boleh transaksi lagi setelah berhasil).
+            const idempotencyKey = crypto.randomUUID();
+
             const response = await apiFetch("/transactions/checkout", {
                 method: "POST",
+                headers: { 'X-Idempotency-Key': idempotencyKey },
                 body: JSON.stringify(payload)
             });
 
@@ -140,7 +181,8 @@ export function useCart(products, fetchProducts, fetchHistory) {
             setLastTransaction({
                 items: [...cartItems],
                 total: totalAmount,
-                date: new Date().toLocaleString('id-ID'),
+                // FIX (MEDIUM-FE-03): Gunakan formatDatetime untuk konsistensi timezone WIB
+                date: formatDatetime(new Date()),
                 type: transactionType
             });
 
@@ -151,51 +193,8 @@ export function useCart(products, fetchProducts, fetchHistory) {
             fetchHistory();
         } catch (error) {
             if (error.data && error.data.require_pin) {
-                const pin = window.prompt(error.message + "\n\nSilakan masukkan PIN Darurat untuk melanjutkan:");
-                if (pin) {
-                    try {
-                        setSaving(true);
-                        const payload = {
-                            transaction_type: transactionType,
-                            emergency_pin: pin,
-                            items: cartItems.map((item) => ({
-                                product_id: item.product_id,
-                                quantity: item.quantity,
-                                capital_cost: item.modal,
-                                selling_price: item.hargaJual,
-                                transaction_type: item.transactionType
-                            }))
-                        };
-                        const response = await apiFetch("/transactions/checkout", {
-                            method: "POST",
-                            body: JSON.stringify(payload)
-                        });
-
-                        setLastTransaction({
-                            items: [...cartItems],
-                            total: totalAmount,
-                            date: new Date().toLocaleString('id-ID'),
-                            type: transactionType
-                        });
-
-                        setMessage(`Transaksi darurat berhasil! Total belanja: Rp${response.total_belanja}`);
-                        setMessageType("success");
-                        setCartItems([]);
-                        fetchProducts();
-                        fetchHistory();
-                        return;
-                    } catch (retryError) {
-                        setMessageType("danger");
-                        setMessage(formatError(retryError));
-                        return;
-                    } finally {
-                        setSaving(false);
-                    }
-                } else {
-                    setMessageType("warning");
-                    setMessage("Transaksi dibatalkan karena Anda tidak memasukkan PIN Darurat.");
-                    return;
-                }
+                setOvertimeModal({ isOpen: true, errorMsg: error.message });
+                return;
             }
             setMessageType("danger");
             setMessage(formatError(error));
@@ -204,6 +203,19 @@ export function useCart(products, fetchProducts, fetchHistory) {
         }
     };
 
+    const submitOvertimeAuth = async (pin) => {
+        try {
+            await apiFetch("/transactions/unlock-overtime", {
+                method: "POST",
+                body: JSON.stringify({ pin })
+            });
+            // Sukses buka sesi, tutup modal dan ulangi transaksi
+            setOvertimeModal({ isOpen: false, errorMsg: '' });
+            await saveTransaction();
+        } catch (err) {
+            throw new Error(formatError(err));
+        }
+    };
     return {
         cartItems, setCartItems,
         selectedProductId, setSelectedProductId,
@@ -218,6 +230,9 @@ export function useCart(products, fetchProducts, fetchHistory) {
         isDropdownOpen, setIsDropdownOpen,
         selectedProduct, filteredProducts,
         totalAmount,
-        addItem, removeItem, saveTransaction
+        addItem, removeItem, saveTransaction,
+        overtimeModal,
+        setOvertimeModal,
+        submitOvertimeAuth
     };
 }

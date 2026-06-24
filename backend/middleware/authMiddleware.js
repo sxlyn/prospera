@@ -36,11 +36,13 @@ const verifyToken = (req, res, next) => {
         }
         
         // 5. Jika valid, simpan data user (termasuk user_id) ke dalam req.user
-        req.user = decoded; 
-        
-        // ISOLASI DATA SaaS: Hitung store_id
+        req.user = decoded;
+
+        // FIX (CRITICAL-05): Normalisasi role ke lowercase untuk memastikan
+        // authorizeRole('owner') selalu cocok terlepas dari casing di JWT payload.
         const userId = decoded.id || decoded.user_id || decoded.userId;
         const userRole = decoded.role ? decoded.role.toLowerCase() : 'owner';
+        req.user.role = userRole; // Explicitly override — bukan hanya lokal var
         req.user.store_id = userRole === 'owner' ? userId : (decoded.owner_id || userId);
         
         // 6. Izinkan masuk ke rute tujuan (Controller)

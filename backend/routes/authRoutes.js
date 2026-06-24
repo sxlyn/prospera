@@ -8,7 +8,7 @@ const { authLimiter } = require('../middleware/rateLimiter');
 const { validateRegister, validateLogin, validateChangePassword } = require('../middleware/validationMiddleware');
 
 // Import fungsi dari Controller
-const { register, login, createUser, getAllUsers, deleteUserById, deleteUser, changePassword } = require('../controllers/authController');
+const { register, login, createUser, getAllUsers, deleteUserById, deleteUser, changePassword, logout } = require('../controllers/authController');
 
 // === RUTE PUBLIK (Rate Limited) ===
 
@@ -17,6 +17,9 @@ router.post('/register', authLimiter, validateRegister, register);
 
 // Login
 router.post('/login', authLimiter, validateLogin, login);
+
+// Logout
+router.post('/logout', verifyToken, logout);
 
 // === RUTE USER MANAGEMENT (Owner Only) ===
 

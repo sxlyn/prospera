@@ -84,7 +84,7 @@ export default function Categories() {
   return (
     <div className="fade-in">
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="mb-0 fw-bold" style={{ color: "#1F2937" }}>Manajemen Kategori</h2>
+        <h2 className="mb-0 fw-bold text-body">Manajemen Kategori</h2>
         {!showForm && (
           <button className="button button-primary" onClick={handleCreateNew}>
             <i className="fas fa-plus me-2"></i> Tambah Kategori

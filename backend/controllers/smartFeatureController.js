@@ -32,17 +32,81 @@ exports.getExpiringProducts = async (req, res) => {
         });
 
         // Tambahkan atribut sisa hari untuk mempermudah frontend
-        const enrichedProducts = expiringProducts.map(product => {
+        const expiring_soon = [];
+        const already_expired = [];
+        let total_spoilage_loss = 0;
+
+        expiringProducts.forEach(product => {
             const data = product.toJSON();
-            const daysLeft = moment(data.expired_date).diff(moment(today), 'days');
+            // Timezone Drift Fix: Gunakan perbandingan murni YYYY-MM-DD
+            const expiredDateMoment = moment.tz(data.expired_date, 'Asia/Jakarta').startOf('day');
+            const todayMoment = moment.tz(today, 'YYYY-MM-DD', 'Asia/Jakarta').startOf('day');
+            
+            const daysLeft = expiredDateMoment.diff(todayMoment, 'days');
             data.days_left = daysLeft;
-            return data;
+
+            if (daysLeft < 0) {
+                already_expired.push(data);
+                total_spoilage_loss += (data.product_cost * data.product_stock);
+            } else {
+                expiring_soon.push(data);
+            }
         });
 
-        res.status(200).json(enrichedProducts);
+        res.status(200).json({
+            expiring_soon,
+            already_expired,
+            total_spoilage_loss
+        });
     } catch (error) {
         console.error("Error fetching expiring products:", error);
         res.status(500).json({ message: "Terjadi kesalahan pada server saat mengambil data kedaluwarsa." });
+    }
+};
+
+exports.writeOffExpiredStock = async (req, res) => {
+    try {
+        const { product_id } = req.body;
+        const ownerId = req.user.store_id;
+
+        const product = await Product.findOne({
+            where: { product_id, user_id_fk: ownerId }
+        });
+
+        if (!product) {
+            return res.status(404).json({ message: "Produk tidak ditemukan." });
+        }
+
+        if (product.product_stock <= 0) {
+            return res.status(400).json({ message: "Stok produk sudah kosong." });
+        }
+
+        const quantity = product.product_stock;
+        const spoilage_loss = quantity * product.product_cost;
+
+        // Load model InventoryLog using sequelize
+        const { InventoryLog } = require('../models');
+
+        await InventoryLog.create({
+            user_id_fk: ownerId,
+            product_id_fk: product.product_id,
+            action: 'WRITE_OFF_EXPIRED',
+            quantity: quantity,
+            spoilage_loss: spoilage_loss,
+            notes: 'Pemusnahan stok kedaluwarsa secara otomatis via sistem'
+        });
+
+        product.product_stock = 0;
+        product.expired_date = null;
+        await product.save();
+
+        res.status(200).json({ 
+            message: "Stok basi berhasil dimusnahkan dan dicatat ke log audit.",
+            spoilage_loss 
+        });
+    } catch (error) {
+        console.error("Error writing off expired stock:", error);
+        res.status(500).json({ message: "Gagal memusnahkan stok kedaluwarsa." });
     }
 };
 
@@ -95,12 +159,13 @@ exports.getAnomalies = async (req, res) => {
         const { AnomalyTicket, Transaction, TransactionDetail, User, Product } = require('../models');
         const moment = require('moment-timezone');
 
-        // Mengambil semua tiket anomali yang bukan DISMISSED, karena DISMISSED artinya void/cancel
+        // Mengambil semua tiket anomali (termasuk DISMISSED untuk Riwayat Audit)
         const tickets = await AnomalyTicket.findAll({
             where: {
                 user_id_fk: ownerId,
-                status: ['OPEN', 'RESOLVED']
+                status: ['OPEN', 'RESOLVED', 'DISMISSED']
             },
+            limit: 50,
             include: [
                 {
                     model: Transaction,

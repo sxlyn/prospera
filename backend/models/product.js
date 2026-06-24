@@ -46,7 +46,14 @@ module.exports = (sequelize, DataTypes) => {
   }, {
     tableName: 'Products',
     timestamps: true,
-    paranoid: true // Mengaktifkan soft delete (deletedAt)
+    paranoid: true, // Mengaktifkan soft delete (deletedAt)
+    // FIX (HIGH-09): Index pada kolom filter utama.
+    // Setiap query produk difilter oleh user_id_fk (SaaS tenant isolation).
+    indexes: [
+      { fields: ['user_id_fk'] },          // Filter per toko (dipakai di SETIAP query)
+      { fields: ['category_id_fk'] },      // JOIN ke Category
+      { fields: ['expired_date'] }         // Query SmartExpiry (filter produk mendekati kadaluarsa)
+    ]
   });
 
   Product.associate = (models) => {

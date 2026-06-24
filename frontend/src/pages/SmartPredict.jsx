@@ -62,7 +62,7 @@ function SmartPredict() {
                 <div className="col-lg-4 col-md-5">
                     <div className="card border-0 shadow-sm rounded-4 p-3 mb-4 d-flex flex-row justify-content-between align-items-center card-hover-effect">
                         <div>
-                            <div className="fw-bold text-dark mb-1 text-uppercase small">Sales Forecasting (Harian)</div>
+                            <div className="fw-bold text-body mb-1 text-uppercase small">Sales Forecasting (Harian)</div>
                             <div className="h4 fw-bold text-success m-0">{formatRupiah(forecast)}</div>
                             <div className="text-muted small mt-1">Perkiraan pendapatan harian berikutnya.</div>
                         </div>
@@ -107,7 +107,7 @@ function SmartPredict() {
 
                 <div className="col-12">
                     {/* Explainable AI (XAI) Banner - Human Centric */}
-                    <div className="alert alert-success d-flex align-items-center mb-4 border-0 shadow-sm" style={{ backgroundColor: '#ecfdf5', color: '#065f46' }}>
+                    <div className="alert alert-success d-flex align-items-center mb-4 border-0 shadow-sm">
                         <i className="bi bi-check-circle-fill fs-3 me-3"></i>
                         <div>
                             <h6 className="fw-bold mb-1">Kondisi Stok Terkendali</h6>
@@ -146,7 +146,7 @@ function SmartPredict() {
                                         
                                         return (
                                             <tr key={item.product_id}>
-                                                <td className="fw-bold text-dark">{item.product_name}</td>
+                                                <td className="fw-bold text-body">{item.product_name}</td>
                                                 <td>{item.product_stock} unit</td>
                                                 <td>
                                                     <span className="text-primary fw-bold">

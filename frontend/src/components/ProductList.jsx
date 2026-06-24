@@ -79,7 +79,7 @@ export default function ProductList({ products, searchTerm, onSearchChange, cate
                             </div>
                             <div className="stock" style={{ marginTop: "8px" }}>
                                 Modal: {formatRupiah(p.product_cost)} | Jual: <span className="text-green fw-bold">{formatRupiah(p.product_price)}</span> | Stok: {p.product_stock}
-                                {p.expired_date && (
+                                {p.expired_date && p.product_stock > 0 && (
                                     <span className="ms-2 text-danger fw-medium" style={{ fontSize: "12px" }}>
                                         | <i className="fas fa-exclamation-circle me-1"></i> Exp: {new Date(p.expired_date).toLocaleDateString('id-ID')}
                                     </span>

@@ -12,7 +12,7 @@
  */
 
 import { useState, useMemo } from "react";
-import { apiFetch, formatError, API_BASE_URL } from "../utils/api";
+import { apiFetch, apiFetchBlob, formatError, API_BASE_URL } from "../utils/api";
 import { getTransactionTypeLabel } from "../utils/transactionHelpers";
 
 export function useHistory() {
@@ -122,19 +122,10 @@ export function useHistory() {
                 url += `?${queryParams.join('&')}`;
             }
 
-            const token = localStorage.getItem('token');
-            const response = await fetch(`${API_BASE_URL}${url}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error("Gagal mengunduh file Excel");
-            }
-
-            const blob = await response.blob();
+            // FIX (CRITICAL-FE-01 + CRITICAL-FE-02): Gunakan apiFetchBlob terpusat
+            // dari api.js (bukan raw fetch). apiFetchBlob membaca token dari
+            // sessionStorage dan menangani 401/403 secara konsisten.
+            const blob = await apiFetchBlob(url);
             const downloadUrl = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = downloadUrl;
@@ -142,6 +133,8 @@ export function useHistory() {
             document.body.appendChild(link);
             link.click();
             link.parentNode.removeChild(link);
+            // Cleanup: bebaskan object URL dari memory setelah dipakai
+            window.URL.revokeObjectURL(downloadUrl);
         } catch (error) {
             setFetchError(formatError(error));
         }

@@ -1,6 +1,6 @@
-const { Transaction, TransactionDetail, Product } = require("../models");
+const { sequelize, Transaction, TransactionDetail, Product, InventoryLog } = require("../models");
 const { Op, fn, col, literal } = require("sequelize");
-const { getDateFilter } = require("../utils/dateUtils");
+const { getDateFilter, buildWIBDateRange } = require("../utils/dateUtils");
 const { getStatusBreakdown, getFinancialSummary, getProductBreakdown } = require("../services/analyticsService"); 
 
 /**
@@ -81,12 +81,13 @@ const getSummary = async (req, res, next) => {
     }
 };
 
-// 2. PROFIT & LOSS
+// 2. PROFIT & LOSS — FIX (SPOILAGE-01): Ikutkan kerugian kedaluwarsa dari InventoryLog
 const getProfit = async (req, res, next) => {
     try {
         const { startDate, endDate } = req.query;
         const userId = req.user.store_id;
 
+        // Query 1: P&L dari transaksi penjualan
         const result = await TransactionDetail.findAll({
             include: [{
                 model: Transaction,
@@ -96,20 +97,48 @@ const getProfit = async (req, res, next) => {
             where: { transaction_type: 'sell' },
             attributes: [
                 [literal(`SUM(CASE WHEN selling_price > capital_cost THEN (selling_price - capital_cost) * quantity ELSE 0 END)`), "total_profit"],
-                [literal(`SUM(CASE WHEN selling_price < capital_cost THEN (capital_cost - selling_price) * quantity ELSE 0 END)`), "total_loss"],
+                [literal(`SUM(CASE WHEN selling_price < capital_cost THEN (capital_cost - selling_price) * quantity ELSE 0 END)`), "sell_loss"],
                 [literal(`SUM(selling_price * quantity)`), "total_revenue"]
             ],
             raw: true
         });
 
-        const profit = parseFloat(result[0].total_profit) || 0;
-        const loss = parseFloat(result[0].total_loss) || 0;
-        const revenue = parseFloat(result[0].total_revenue) || 0;
-        
-        const net_income = profit - loss;
+        // Query 2: Kerugian kedaluwarsa dari InventoryLog
+        // FIX (L1-02): Gunakan buildWIBDateRange — presisi 00:00:00 s/d 23:59:59 WIB
+        const spoilageWhere = { user_id_fk: userId, action: 'WRITE_OFF_EXPIRED' };
+        const dateRange = buildWIBDateRange(startDate, endDate);
+        if (dateRange) spoilageWhere.createdAt = dateRange;
+
+        const spoilageData = await InventoryLog.findAll({
+            where: spoilageWhere,
+            attributes: [
+                [fn('SUM', col('spoilage_loss')), 'total_spoilage'],
+                [fn('SUM', col('quantity')), 'total_qty_destroyed']
+            ],
+            raw: true
+        });
+
+        const profit     = parseInt(result[0]?.total_profit)  || 0;
+        const sell_loss  = parseInt(result[0]?.sell_loss)     || 0;
+        const revenue    = parseInt(result[0]?.total_revenue) || 0;
+        const spoilage_loss      = parseInt(spoilageData[0]?.total_spoilage)      || 0;
+        const qty_destroyed      = parseInt(spoilageData[0]?.total_qty_destroyed) || 0;
+
+        // Total kerugian nyata = jual rugi + modal produk expired yang dimusnahkan
+        const total_loss = sell_loss + spoilage_loss;
+        const net_income = profit - total_loss;
         const profit_margin = revenue > 0 ? ((net_income / revenue) * 100).toFixed(2) : 0;
 
-        res.json({ revenue, total_profit: profit, total_loss: loss, net_income, profit_margin: `${profit_margin}%` });
+        res.json({ 
+            revenue, 
+            total_profit: profit, 
+            sell_loss,         // Kerugian dari jual di bawah modal
+            spoilage_loss,     // Kerugian dari pemusnahan stok expired
+            total_loss,        // Gabungan kedua sumber kerugian
+            qty_destroyed,     // Total unit yang dimusnahkan
+            net_income, 
+            profit_margin: `${profit_margin}%` 
+        });
     } catch (error) {
         next(error);
     }
@@ -250,13 +279,61 @@ const getLossProducts = async (req, res, next) => {
             product_id: item["Product.product_id"],
             product_name: item["Product.product_name"],
             sold: parseInt(item.sold) || 0,
-            modal: parseFloat(item.modal) || 0,
-            harga_jual: parseFloat(item.harga_jual) || 0,
-            rugi: parseFloat(item.rugi) || 0
+            modal: parseInt(item.modal) || 0,
+            harga_jual: parseInt(item.harga_jual) || 0,
+            rugi: parseInt(item.rugi) || 0
         })));
     } catch (error) {
         next(error);
     }
 };
 
-module.exports = { getSummary, getProfit, getTopProduct, getMonthly, getLossProducts };
+// 6. SPOILAGE LOG — FIX (SPOILAGE-01 + L1-02 + L1-03)
+// GROUP BY product — Top 50 produk paling sering kedaluwarsa
+// Mencegah DOM explosion (toko lama = ribuan event) + presisi timezone WIB
+const getSpoilageLoss = async (req, res, next) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const userId = req.user.store_id;
+
+        // FIX (L1-02): Timezone-aware date boundaries (WIB 00:00:00 — 23:59:59)
+        const spoilageWhere = { user_id_fk: userId, action: 'WRITE_OFF_EXPIRED' };
+        const dateRange = buildWIBDateRange(startDate, endDate);
+        if (dateRange) spoilageWhere.createdAt = dateRange;
+
+        // FIX (L1-03): GROUP BY product (bukan per-event) — max 50 baris
+        // Ini mencegah browser crash saat toko lama membuka modal "Sepanjang Waktu"
+        const logs = await InventoryLog.findAll({
+            where: spoilageWhere,
+            attributes: [
+                'product_id_fk',
+                [fn('SUM', col('quantity')),      'total_qty'],
+                [fn('SUM', col('spoilage_loss')), 'total_loss'],
+                [fn('MAX', col('InventoryLog.createdAt')),      'last_destroyed_at'],
+                [fn('COUNT', col('InventoryLog.id')), 'event_count']
+            ],
+            include: [{ 
+                model: Product, 
+                as: 'Product',
+                attributes: ['product_name'],
+                required: false,
+                paranoid: false  // FIX (L1-01): Produk soft-deleted tetap muncul di laporan forensik
+            }],
+            group: ['product_id_fk', 'Product.product_id', 'Product.product_name'],
+            order: [[literal('total_loss'), 'DESC']],
+            limit: 50  // Anti-DOM explosion: max 50 produk teratas
+        });
+
+        res.json(logs.map(log => ({
+            product_name:     log.Product?.product_name || 'Produk Dihapus',
+            total_qty:        parseInt(log.dataValues.total_qty)    || 0,
+            total_loss:       parseInt(log.dataValues.total_loss)   || 0,
+            event_count:      parseInt(log.dataValues.event_count)  || 0,
+            last_destroyed_at: log.dataValues.last_destroyed_at
+        })));
+    } catch (error) {
+        next(error);
+    }
+};
+
+module.exports = { getSummary, getProfit, getTopProduct, getMonthly, getLossProducts, getSpoilageLoss };

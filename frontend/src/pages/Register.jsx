@@ -13,7 +13,10 @@ export default function Register() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const nav = useNavigate();
 
-  const register = async () => {
+  // FIX (MEDIUM-FE-04): Rename + tambah e.preventDefault() agar bisa dipakai
+  // sebagai onSubmit handler di <form>. Semua logika validasi dipertahankan.
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setMessage("");
 
     // --- VALIDASI CLIENT-SIDE (selaras dengan backend) ---
@@ -54,11 +57,6 @@ export default function Register() {
     }
   };
 
-  // Handler: Submit form dengan Enter
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") register();
-  };
-
   return (
     <div className="login-page">
       <div className="login-card">
@@ -81,22 +79,25 @@ export default function Register() {
           </div>
         )}
 
-        <input className="input" placeholder="Nama Lengkap (Nama Toko)" type="text"
-          value={username} onChange={e => setUsername(e.target.value)} 
-          onKeyDown={handleKeyDown} />
-        <input className="input" placeholder="Email" type="email"
-          value={email} onChange={e => setEmail(e.target.value)} 
-          onKeyDown={handleKeyDown} />
-        <input className="input" placeholder="Password (Min. 6 karakter)" type="password"
-          value={password} onChange={e => setPassword(e.target.value)} 
-          onKeyDown={handleKeyDown} />
-          
-        <div> 
-          <button className="button" onClick={register} disabled={isSubmitting}
-            style={{ opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? "not-allowed" : "pointer" }}>
-            {isSubmitting ? "Memproses..." : "Daftar Akun"}
-          </button>
-        </div>
+        {/* FIX (MEDIUM-FE-04): Bungkus dengan <form> agar:
+            1. Tombol Enter di input auto-submit tanpa handleKeyDown terpisah
+            2. Browser native validation aktif
+            3. Password manager mengenali ini sebagai form registrasi */}
+        <form onSubmit={handleSubmit} noValidate>
+          <input className="input" placeholder="Nama Lengkap (Nama Toko)" type="text"
+            value={username} onChange={e => setUsername(e.target.value)} />
+          <input className="input" placeholder="Email" type="email"
+            value={email} onChange={e => setEmail(e.target.value)} />
+          <input className="input" placeholder="Password (Min. 6 karakter)" type="password"
+            value={password} onChange={e => setPassword(e.target.value)} />
+            
+          <div> 
+            <button type="submit" className="button" disabled={isSubmitting}
+              style={{ opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? "not-allowed" : "pointer" }}>
+              {isSubmitting ? "Memproses..." : "Daftar Akun"}
+            </button>
+          </div>
+        </form>
 
         <p style={{ textAlign: "center", marginTop: "16px", fontSize: "13px", color: "var(--text-secondary)" }}>
           Sudah punya akun? <Link to="/login" style={{ color: "#2563EB", textDecoration: "none", fontWeight: "bold" }}>Login di sini</Link>

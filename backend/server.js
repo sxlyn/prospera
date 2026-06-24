@@ -6,6 +6,10 @@ const helmet = require('helmet');
 const { sequelize } = require('./models');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const { CORS_ORIGIN, BODY_SIZE_LIMIT } = require('./config/appConfig');
+// FIX (HIGH-04): Request/Correlation ID Middleware untuk observability enterprise
+const requestId = require('./middleware/requestId');
+// FIX (MEDIUM-14): Structured Logging — ganti raw console.log dengan logger terstruktur
+const logger = require('./utils/logger');
 
 // --- Fail-fast: Validasi konfigurasi kritis sebelum server berjalan ---
 if (!process.env.JWT_SECRET) {
@@ -26,14 +30,36 @@ const app = express();
 
 // ===== LAPISAN KEAMANAN (Security Middleware Stack) =====
 
+// Layer 0: Request ID — Inject X-Request-Id ke setiap request untuk tracing & observability
+app.use(requestId);
+
+// FIX (MEDIUM-14): HTTP Request Logger — log setiap request dengan structured JSON
+// Di production ini memudahkan monitoring dan alerting
+app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        // Jangan log health-check endpoint agar tidak flooding log
+        if (req.originalUrl !== '/') {
+            logger.http(req, res.statusCode, Date.now() - start);
+        }
+    });
+    next();
+});
+
 // Layer 1: Helmet — Menyembunyikan identitas server & mencegah serangan injeksi header
 app.use(helmet());
 
 // Layer 2: CORS — Membatasi akses hanya dari origin yang diizinkan
+// FIX (CRIT-04): Tambahkan 'X-Idempotency-Key' ke allowedHeaders.
+// Tanpa ini, browser CORS preflight memblokir header kustom sebelum mencapai
+// controller, sehingga sistem anti-transaksi-duplikat di transactionController.js
+// (Line 35: req.headers['x-idempotency-key']) tidak pernah berfungsi.
+// X-Request-ID ditambahkan juga agar frontend bisa membaca requestId dari error response.
 app.use(cors({
     origin: CORS_ORIGIN,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key', 'X-Request-ID'],
+    exposedHeaders: ['X-Request-ID'] // Izinkan frontend membaca header ini dari response
 }));
 
 // Layer 3: Rate Limiter Global — Anti DDoS untuk seluruh endpoint API
@@ -82,17 +108,22 @@ app.use((req, res) => {
 // Penanganan Kesalahan Global (500 Handler) — Sentral & Aman
 // Menangkap semua error yang dilempar via next(error) dari Controller
 app.use((err, req, res, next) => {
-    // Log detail error ke terminal server (untuk debugging internal)
-    console.error(`[${new Date().toISOString()}] Kesalahan Fatal Sistem:`);
-    console.error(`  Route: ${req.method} ${req.originalUrl}`);
-    console.error(`  Pesan: ${err.message}`);
-    console.error(`  Stack: ${err.stack}`);
+    // FIX (MEDIUM-14): Structured error log — parseable oleh monitoring tools
+    logger.error('Unhandled server error', {
+        requestId: req.requestId || 'N/A',
+        route: `${req.method} ${req.originalUrl}`,
+        message: err.message,
+        stack: err.stack,
+        isOperational: err.isOperational || false
+    });
 
     // Kirim respons generik ke client (TIDAK membocorkan detail error)
     res.status(err.statusCode || 500).json({ 
         message: err.isOperational 
             ? err.message 
-            : "Terjadi kesalahan internal sistem yang tidak terduga." 
+            : "Terjadi kesalahan internal sistem yang tidak terduga.",
+        // RequestId dikembalikan agar frontend bisa report ke support
+        requestId: req.requestId
     });
 });
 
@@ -102,16 +133,19 @@ const PORT = process.env.PORT || 5000;
 
 sequelize.authenticate()
     .then(() => {
-        console.log('Koneksi ke basis data MySQL (Sequelize) berhasil didirikan.');
+        logger.info('Koneksi ke basis data MySQL (Sequelize) berhasil didirikan.');
         
         // Memulai Background Jobs (Cron)
         const { startCronJobs } = require('./jobs/cronJobs');
         startCronJobs();
 
         const server = app.listen(PORT, () => {
-            console.log(`Server Node.js berjalan pada port ${PORT}`);
-            console.log(`Helmet aktif | CORS dibatasi ke: ${CORS_ORIGIN}`);
-            console.log(`Rate limiter aktif | Body limit: ${BODY_SIZE_LIMIT}`);
+            logger.info(`Server Node.js aktif`, {
+                port: PORT,
+                corsOrigin: CORS_ORIGIN,
+                bodyLimit: BODY_SIZE_LIMIT,
+                nodeEnv: process.env.NODE_ENV || 'development'
+            });
         });
 
         // PERFORMANCE FIX (B-S01): Graceful Shutdown

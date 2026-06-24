@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getAnomalies, resolveAnomaly, formatError } from '../utils/api';
 import { formatRupiah } from '../utils/format';
 
@@ -8,6 +8,14 @@ function FraudDetectionWidget() {
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState('open'); // 'open' or 'history'
     const [actionLoading, setActionLoading] = useState(false);
+
+    const [activeResolution, setActiveResolution] = useState({
+        ticket_id: null,
+        status: null,
+        note: '',
+        error: null
+    });
+
 
     useEffect(() => {
         fetchAnomalies();
@@ -26,16 +34,36 @@ function FraudDetectionWidget() {
         }
     };
 
-    const handleResolve = async (ticket_id, status) => {
-        const note = prompt(`Masukkan catatan penyelesaian (opsional):`, status === 'DISMISSED' ? 'Kasus wajar/diabaikan' : 'Telah ditindaklanjuti');
-        if (note === null) return; // User cancelled prompt
+    const openResolveDialog = (ticket_id, status) => {
+        setActiveResolution({
+            ticket_id,
+            status,
+            note: '', 
+            error: null
+        });
+    };
+
+    const submitResolve = async () => {
+        // Lapis 6: Spacebar Trick Sanitization
+        if (activeResolution.note.trim() === '') {
+            setActiveResolution(prev => ({ ...prev, error: "Catatan tidak boleh kosong atau hanya spasi!" }));
+            return;
+        }
 
         try {
             setActionLoading(true);
-            await resolveAnomaly({ ticket_id, status, resolution_note: note });
+            setActiveResolution(prev => ({ ...prev, error: null }));
+            await resolveAnomaly({ 
+                ticket_id: activeResolution.ticket_id, 
+                status: activeResolution.status, 
+                resolution_note: activeResolution.note.trim() 
+            });
             await fetchAnomalies();
+            // Penyiaran Alarm: Beritahu seluruh aplikasi bahwa data fraud telah berubah
+            window.dispatchEvent(new Event('fraudDataUpdated'));
+            setActiveResolution({ ticket_id: null, status: null, note: '', error: null }); 
         } catch (err) {
-            alert(formatError(err));
+            setActiveResolution(prev => ({ ...prev, error: formatError(err) })); 
         } finally {
             setActionLoading(false);
         }
@@ -55,8 +83,8 @@ function FraudDetectionWidget() {
 
     const openTimeAnomalies = filterByStatus(anomalies.timeAnomalies, true);
     const openPriceAnomalies = filterByStatus(anomalies.priceAnomalies, true);
-    const historyTimeAnomalies = filterByStatus(anomalies.timeAnomalies, false);
-    const historyPriceAnomalies = filterByStatus(anomalies.priceAnomalies, false);
+    const historyTimeAnomalies = filterByStatus(anomalies.timeAnomalies, false).slice(0, 15);
+    const historyPriceAnomalies = filterByStatus(anomalies.priceAnomalies, false).slice(0, 15);
 
     const hasOpenAnomalies = openTimeAnomalies.length > 0 || openPriceAnomalies.length > 0;
     const hasHistoryAnomalies = historyTimeAnomalies.length > 0 || historyPriceAnomalies.length > 0;
@@ -82,60 +110,93 @@ function FraudDetectionWidget() {
 
     const renderTimeTable = (data, isOpen) => (
         <div className="mb-4">
-            <h6 className="fw-bold text-dark"><i className="fas fa-clock text-warning me-2"></i>Anomali Waktu (Aktivitas di Luar Jam)</h6>
+            <h6 className="fw-bold text-body"><i className="fas fa-clock text-warning me-2"></i>Anomali Waktu (Aktivitas di Luar Jam)</h6>
             <div className="table-responsive">
                 <table className="table table-sm table-hover align-middle">
-                    <thead className="table-light">
+                    <thead className="table-secondary">
                         <tr>
-                            <th>Transaksi & Nominal</th>
+                            <th>Transaksi</th>
                             <th>Waktu & Kasir</th>
-                            <th>Rincian Produk</th>
+                            <th>Keterangan</th>
                             {isOpen ? <th>Aksi</th> : <th>Status Resolusi</th>}
                         </tr>
                     </thead>
                     <tbody>
                         {data.map((item, idx) => (
-                            <tr key={idx}>
-                                <td>
-                                    <div className="fw-semibold">#{item.transaction_id}</div>
-                                    <div className="small text-danger fw-bold">{formatRupiah(item.total_amount)}</div>
-                                </td>
-                                <td>
-                                    <div className="text-danger small fw-bold">
-                                        {new Intl.DateTimeFormat('id-ID', {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            second: '2-digit',
-                                            timeZoneName: 'short'
-                                        }).format(new Date(item.datetime))}
-                                    </div>
-                                    <div className="small text-muted">{item.cashier}</div>
-                                </td>
-                                <td>
-                                    <div className="small text-truncate" style={{ maxWidth: '200px' }} title={item.products}>{item.products}</div>
-                                    <div className="text-muted small mt-1">{item.reason}</div>
-                                </td>
-                                {isOpen ? (
+                            <React.Fragment key={item.ticket_id}>
+                                <tr>
                                     <td>
-                                        <div className="d-flex gap-2">
-                                            <button onClick={() => handleResolve(item.ticket_id, 'DISMISSED')} className="btn btn-sm btn-outline-secondary" disabled={actionLoading}>
-                                                <i className="fas fa-eye-slash me-1"></i> Wajar
-                                            </button>
-                                            <button onClick={() => handleResolve(item.ticket_id, 'RESOLVED')} className="btn btn-sm btn-outline-primary" disabled={actionLoading}>
-                                                <i className="fas fa-check me-1"></i> Selesai
-                                            </button>
+                                        <div className="fw-semibold">#{item.transaction_id}</div>
+                                        <div className="small text-muted">{new Date(item.datetime).toLocaleDateString('id-ID')}</div>
+                                    </td>
+                                    <td>
+                                        <div className="text-danger small fw-bold">
+                                            {new Intl.DateTimeFormat('id-ID', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                                timeZoneName: 'short'
+                                            }).format(new Date(item.datetime))}
                                         </div>
+                                        <div className="small text-muted">{item.cashier}</div>
                                     </td>
-                                ) : (
                                     <td>
-                                        <span className={`badge ${item.status === 'RESOLVED' ? 'bg-success' : 'bg-secondary'} me-2`}>
-                                            {item.status}
-                                        </span>
-                                        <div className="small text-muted mt-1">Oleh: {item.resolved_by || 'Sistem'}</div>
-                                        <div className="small text-muted fst-italic">"{item.resolution_note}"</div>
+                                        <div className="text-muted small">{item.reason}</div>
                                     </td>
+                                    {isOpen ? (
+                                        <td>
+                                            <div className="d-flex gap-2">
+                                                <button onClick={() => openResolveDialog(item.ticket_id, 'DISMISSED')} className="btn btn-sm btn-outline-secondary" disabled={actionLoading}>
+                                                    <i className="fas fa-eye-slash me-1"></i> Wajar
+                                                </button>
+                                                <button onClick={() => openResolveDialog(item.ticket_id, 'RESOLVED')} className="btn btn-sm btn-outline-primary" disabled={actionLoading}>
+                                                    <i className="fas fa-check me-1"></i> Selesai
+                                                </button>
+                                            </div>
+                                        </td>
+                                    ) : (
+                                        <td>
+                                            <span className={`badge ${item.status === 'RESOLVED' ? 'bg-success' : 'bg-secondary'} me-2`}>
+                                                {item.status}
+                                            </span>
+                                            <div className="small text-muted mt-1">Oleh: {item.resolved_by || 'Sistem'}</div>
+                                            <div className="small text-muted fst-italic">"{item.resolution_note}"</div>
+                                        </td>
+                                    )}
+                                </tr>
+                                {activeResolution.ticket_id === item.ticket_id && (
+                                    <tr className="table-secondary">
+                                        <td colSpan={4} className="p-3 border-start border-primary border-4 shadow-sm">
+                                            <div className="d-flex flex-column gap-2">
+                                                <div className="d-flex justify-content-between align-items-center">
+                                                    <label className="form-label text-primary small fw-bold mb-0">
+                                                        <i className="fas fa-edit me-1"></i>Catatan Resolusi ({activeResolution.status})
+                                                    </label>
+                                                    <button type="button" className="btn-close btn-sm" onClick={() => setActiveResolution({ ticket_id: null })} disabled={actionLoading}></button>
+                                                </div>
+                                                {activeResolution.error && (
+                                                    <div className="alert alert-danger small py-1 mb-0"><i className="fas fa-exclamation-circle me-1"></i>{activeResolution.error}</div>
+                                                )}
+                                                <textarea 
+                                                    className="form-control form-control-sm" 
+                                                    rows="2" 
+                                                    autoFocus
+                                                    placeholder="Ketik penjelasan di sini..."
+                                                    value={activeResolution.note}
+                                                    onChange={(e) => setActiveResolution(prev => ({ ...prev, note: e.target.value }))}
+                                                    disabled={actionLoading}
+                                                ></textarea>
+                                                <div className="d-flex justify-content-end gap-2 mt-1">
+                                                    <button type="button" className="btn btn-sm btn-light border" onClick={() => setActiveResolution({ ticket_id: null })} disabled={actionLoading}>Batal</button>
+                                                    <button type="button" className="btn btn-sm btn-primary" onClick={submitResolve} disabled={actionLoading}>
+                                                        {actionLoading ? <><span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Simpan...</> : 'Simpan Catatan'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 )}
-                            </tr>
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
@@ -145,10 +206,10 @@ function FraudDetectionWidget() {
 
     const renderPriceTable = (data, isOpen) => (
         <div className="mb-4">
-            <h6 className="fw-bold text-dark"><i className="fas fa-tags text-danger me-2"></i>Anomali Harga (Jual Rugi / Margin Tipis)</h6>
+            <h6 className="fw-bold text-body"><i className="fas fa-tags text-danger me-2"></i>Anomali Harga (Jual Rugi / Margin Tipis)</h6>
             <div className="table-responsive">
                 <table className="table table-sm table-hover align-middle">
-                    <thead className="table-light">
+                    <thead className="table-secondary">
                         <tr>
                             <th>Transaksi & Produk</th>
                             <th>Harga (Modal vs Jual)</th>
@@ -158,40 +219,74 @@ function FraudDetectionWidget() {
                     </thead>
                     <tbody>
                         {data.map((item, idx) => (
-                            <tr key={idx}>
-                                <td>
-                                    <div className="fw-semibold">#{item.transaction_id} - {item.product}</div>
-                                    <div className="small text-muted">Kasir: {item.cashier}</div>
-                                </td>
-                                <td>
-                                    <div className="small text-muted">Modal: {formatRupiah(item.capital_cost)}</div>
-                                    <div className="text-danger fw-bold">Jual: {formatRupiah(item.selling_price)}</div>
-                                </td>
-                                <td>
-                                    <span className="badge bg-danger">Margin: {item.margin_percentage}%</span>
-                                    <div className="text-muted small mt-1">{item.reason}</div>
-                                </td>
-                                {isOpen ? (
+                            <React.Fragment key={item.ticket_id}>
+                                <tr>
                                     <td>
-                                        <div className="d-flex gap-2">
-                                            <button onClick={() => handleResolve(item.ticket_id, 'DISMISSED')} className="btn btn-sm btn-outline-secondary" disabled={actionLoading}>
-                                                <i className="fas fa-eye-slash me-1"></i> Wajar
-                                            </button>
-                                            <button onClick={() => handleResolve(item.ticket_id, 'RESOLVED')} className="btn btn-sm btn-outline-primary" disabled={actionLoading}>
-                                                <i className="fas fa-check me-1"></i> Selesai
-                                            </button>
-                                        </div>
+                                        <div className="fw-semibold">#{item.transaction_id} - {item.product}</div>
+                                        <div className="small text-muted">Kasir: {item.cashier}</div>
                                     </td>
-                                ) : (
                                     <td>
-                                        <span className={`badge ${item.status === 'RESOLVED' ? 'bg-success' : 'bg-secondary'} me-2`}>
-                                            {item.status}
-                                        </span>
-                                        <div className="small text-muted mt-1">Oleh: {item.resolved_by || 'Sistem'}</div>
-                                        <div className="small text-muted fst-italic">"{item.resolution_note}"</div>
+                                        <div className="small text-muted">Modal: {formatRupiah(item.capital_cost)}</div>
+                                        <div className="text-danger fw-bold">Jual: {formatRupiah(item.selling_price)}</div>
                                     </td>
+                                    <td>
+                                        <span className="badge bg-danger">Margin: {item.margin_percentage}%</span>
+                                        <div className="text-muted small mt-1">{item.reason}</div>
+                                    </td>
+                                    {isOpen ? (
+                                        <td>
+                                            <div className="d-flex gap-2">
+                                                <button onClick={() => openResolveDialog(item.ticket_id, 'DISMISSED')} className="btn btn-sm btn-outline-secondary" disabled={actionLoading}>
+                                                    <i className="fas fa-eye-slash me-1"></i> Wajar
+                                                </button>
+                                                <button onClick={() => openResolveDialog(item.ticket_id, 'RESOLVED')} className="btn btn-sm btn-outline-primary" disabled={actionLoading}>
+                                                    <i className="fas fa-check me-1"></i> Selesai
+                                                </button>
+                                            </div>
+                                        </td>
+                                    ) : (
+                                        <td>
+                                            <span className={`badge ${item.status === 'RESOLVED' ? 'bg-success' : 'bg-secondary'} me-2`}>
+                                                {item.status}
+                                            </span>
+                                            <div className="small text-muted mt-1">Oleh: {item.resolved_by || 'Sistem'}</div>
+                                            <div className="small text-muted fst-italic">"{item.resolution_note}"</div>
+                                        </td>
+                                    )}
+                                </tr>
+                                {activeResolution.ticket_id === item.ticket_id && (
+                                    <tr className="table-secondary">
+                                        <td colSpan={4} className="p-3 border-start border-primary border-4 shadow-sm">
+                                            <div className="d-flex flex-column gap-2">
+                                                <div className="d-flex justify-content-between align-items-center">
+                                                    <label className="form-label text-primary small fw-bold mb-0">
+                                                        <i className="fas fa-edit me-1"></i>Catatan Resolusi ({activeResolution.status})
+                                                    </label>
+                                                    <button type="button" className="btn-close btn-sm" onClick={() => setActiveResolution({ ticket_id: null })} disabled={actionLoading}></button>
+                                                </div>
+                                                {activeResolution.error && (
+                                                    <div className="alert alert-danger small py-1 mb-0"><i className="fas fa-exclamation-circle me-1"></i>{activeResolution.error}</div>
+                                                )}
+                                                <textarea 
+                                                    className="form-control form-control-sm" 
+                                                    rows="2" 
+                                                    autoFocus
+                                                    placeholder="Ketik penjelasan di sini..."
+                                                    value={activeResolution.note}
+                                                    onChange={(e) => setActiveResolution(prev => ({ ...prev, note: e.target.value }))}
+                                                    disabled={actionLoading}
+                                                ></textarea>
+                                                <div className="d-flex justify-content-end gap-2 mt-1">
+                                                    <button type="button" className="btn btn-sm btn-light border" onClick={() => setActiveResolution({ ticket_id: null })} disabled={actionLoading}>Batal</button>
+                                                    <button type="button" className="btn btn-sm btn-primary" onClick={submitResolve} disabled={actionLoading}>
+                                                        {actionLoading ? <><span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Simpan...</> : 'Simpan Catatan'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 )}
-                            </tr>
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
@@ -210,7 +305,7 @@ function FraudDetectionWidget() {
                     data-bs-target="#FraudModal"
                 >
                     <div>
-                        <div className="fw-bold text-dark mb-1">To-Do: Resolusi Anomali</div>
+                        <div className="fw-bold text-body mb-1">To-Do: Resolusi Anomali</div>
                         {totalOpenLoss > 0 ? (
                             <div className="h4 fw-bold text-danger m-0">{formatRupiah(totalOpenLoss)}</div>
                         ) : (
@@ -239,7 +334,7 @@ function FraudDetectionWidget() {
             )}
 
             {/* The Modal */}
-            <div className="modal fade" id="FraudModal" tabIndex="-1" aria-labelledby="FraudModalLabel" aria-hidden="true">
+            <div className="modal fade" id="FraudModal" aria-labelledby="FraudModalLabel" aria-hidden="true">
                 <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
                     <div className="modal-content border-0 shadow">
                         <div className="modal-header bg-primary text-white border-0">
@@ -250,11 +345,11 @@ function FraudDetectionWidget() {
                         </div>
                         
                         {/* Tabs Navigation */}
-                        <div className="bg-light border-bottom px-4 pt-3">
+                        <div className="bg-body-secondary border-bottom px-4 pt-3">
                             <ul className="nav nav-tabs border-0" role="tablist">
                                 <li className="nav-item" role="presentation">
                                     <button 
-                                        className={`nav-link fw-bold border-0 ${activeTab === 'open' ? 'active text-primary bg-white border-top border-start border-end rounded-top' : 'text-muted'}`}
+                                        className={`nav-link fw-bold border-0 ${activeTab === 'open' ? 'active text-primary bg-body border-top border-start border-end rounded-top' : 'text-muted'}`}
                                         onClick={() => setActiveTab('open')}
                                     >
                                         <i className="fas fa-exclamation-circle me-2"></i>
@@ -264,7 +359,7 @@ function FraudDetectionWidget() {
                                 </li>
                                 <li className="nav-item" role="presentation">
                                     <button 
-                                        className={`nav-link fw-bold border-0 ${activeTab === 'history' ? 'active text-primary bg-white border-top border-start border-end rounded-top' : 'text-muted'}`}
+                                        className={`nav-link fw-bold border-0 ${activeTab === 'history' ? 'active text-primary bg-body border-top border-start border-end rounded-top' : 'text-muted'}`}
                                         onClick={() => setActiveTab('history')}
                                     >
                                         <i className="fas fa-history me-2"></i>
@@ -274,7 +369,7 @@ function FraudDetectionWidget() {
                             </ul>
                         </div>
 
-                        <div className="modal-body p-4 bg-white">
+                        <div className="modal-body p-4 bg-body-tertiary">
                             {activeTab === 'open' ? (
                                 <>
                                     {!hasOpenAnomalies && renderEmptyState(true)}
@@ -290,12 +385,13 @@ function FraudDetectionWidget() {
                             )}
                         </div>
                         
-                        <div className="modal-footer border-top bg-light">
+                        <div className="modal-footer border-top bg-body">
                             <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
                         </div>
                     </div>
                 </div>
             </div>
+
         </div>
     );
 }

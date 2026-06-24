@@ -68,6 +68,11 @@
     border: none;
 }
 
+html[data-bs-theme="dark"] .table-simple thead th {
+    background: var(--bs-secondary-bg);
+    color: var(--bs-secondary-color);
+}
+
 .table-simple td {
     border-bottom: 1px solid #f1f5f9;
     padding: 16px 12px;

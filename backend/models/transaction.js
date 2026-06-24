@@ -38,7 +38,15 @@ module.exports = (sequelize, DataTypes) => {
     }
   }, {
     tableName: 'Transactions',
-    timestamps: false
+    timestamps: false,
+    // FIX (HIGH-09): Index pada kolom FK dan filter paling sering dipakai.
+    // Tanpa index ini, setiap query history melakukan full table scan.
+    indexes: [
+      { fields: ['user_id_fk'] },                            // Filter per toko
+      { fields: ['transaction_datetime'] },                  // Filter range tanggal
+      { fields: ['user_id_fk', 'transaction_datetime'] },    // Composite: filter toko + tanggal (paling sering)
+      { fields: ['status'] }                                 // Filter status='success'
+    ]
   });
 
   Transaction.associate = (models) => {
@@ -91,27 +99,50 @@ module.exports = (sequelize, DataTypes) => {
   };
 
   Transaction.addHook('afterCreate', async (transaction, options) => {
-      await checkTimeAnomaly(transaction, options);
+      // FIX (MEDIUM-01): Hook error TIDAK boleh membatalkan transaksi yang sudah berhasil.
+      // Anomaly detection adalah operasi sekunder — jika gagal, log dan lanjutkan.
+      try {
+          await checkTimeAnomaly(transaction, options);
+      } catch (hookErr) {
+          console.error('[Hook] afterCreate checkTimeAnomaly gagal (non-fatal):', {
+              transaction_id: transaction.transaction_id,
+              error: hookErr.message
+          });
+      }
   });
   
   Transaction.addHook('afterUpdate', async (transaction, options) => {
-      if (transaction.status === 'cancelled') {
-         const { AnomalyTicket } = sequelize.models;
-         await AnomalyTicket.update({ status: 'DISMISSED', resolution_note: 'Sistem: Transaksi telah di-Void/Dibatalkan' }, {
-             where: { reference_id: transaction.transaction_id, anomaly_type: 'TIME', status: 'OPEN' },
-             transaction: options.transaction
-         });
-      } else {
-         await checkTimeAnomaly(transaction, options);
+      try {
+          if (transaction.status === 'cancelled') {
+             const { AnomalyTicket } = sequelize.models;
+             await AnomalyTicket.update({ status: 'DISMISSED', resolution_note: 'Sistem: Transaksi telah di-Void/Dibatalkan' }, {
+                 where: { reference_id: transaction.transaction_id, anomaly_type: 'TIME', status: 'OPEN' },
+                 transaction: options.transaction
+             });
+          } else {
+             await checkTimeAnomaly(transaction, options);
+          }
+      } catch (hookErr) {
+          console.error('[Hook] afterUpdate checkTimeAnomaly gagal (non-fatal):', {
+              transaction_id: transaction.transaction_id,
+              error: hookErr.message
+          });
       }
   });
 
   Transaction.addHook('afterDestroy', async (transaction, options) => {
-      const { AnomalyTicket } = sequelize.models;
-      await AnomalyTicket.update({ status: 'DISMISSED', resolution_note: 'Sistem: Transaksi telah di-Void/Dihapus' }, {
-          where: { reference_id: transaction.transaction_id, anomaly_type: 'TIME', status: 'OPEN' },
-          transaction: options.transaction
-      });
+      try {
+          const { AnomalyTicket } = sequelize.models;
+          await AnomalyTicket.update({ status: 'DISMISSED', resolution_note: 'Sistem: Transaksi telah di-Void/Dihapus' }, {
+              where: { reference_id: transaction.transaction_id, anomaly_type: 'TIME', status: 'OPEN' },
+              transaction: options.transaction
+          });
+      } catch (hookErr) {
+          console.error('[Hook] afterDestroy AnomalyTicket update gagal (non-fatal):', {
+              transaction_id: transaction.transaction_id,
+              error: hookErr.message
+          });
+      }
   });
 
   return Transaction;

@@ -10,10 +10,14 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { formatRupiah } from '../utils/format';
+import { useTheme } from '../hooks/useTheme';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
 function TrendChart({ labels, sales, profit, salesLabel = 'Penjualan Kotor', profitLabel = 'Laba Bersih' }) {
+    const { activeTheme } = useTheme();
+    const isDark = activeTheme === 'dark';
+
     const data = {
         labels,
         datasets: [
@@ -35,19 +39,38 @@ function TrendChart({ labels, sales, profit, salesLabel = 'Penjualan Kotor', pro
         ],
     };
 
+    const textColor = isDark ? '#dee2e6' : '#6c757d'; // Bootstrap gray-200 or gray-600
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+
     return (
         <Line
             data={data}
             options={{
                 responsive: true,
                 maintainAspectRatio: false,
+                color: textColor, // Legend text color
                 plugins: {
+                    legend: {
+                        labels: {
+                            color: textColor
+                        }
+                    },
                     tooltip: {
                         callbacks: {
                             label: (context) => `${context.dataset.label}: ${formatRupiah(context.raw)}`,
                         },
                     },
                 },
+                scales: {
+                    x: {
+                        ticks: { color: textColor },
+                        grid: { color: gridColor, drawBorder: false }
+                    },
+                    y: {
+                        ticks: { color: textColor },
+                        grid: { color: gridColor, drawBorder: false }
+                    }
+                }
             }}
         />
     );

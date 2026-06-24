@@ -20,7 +20,20 @@
 	<title>Prospera — Smart POS & Business Analytics</title>
 </head>
 
-<body>
+<body class="preload">
+	<script>
+		(function() {
+			try {
+				var savedTheme = localStorage.getItem('theme');
+				var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+				if (savedTheme === 'dark' || (savedTheme === 'system' && prefersDark) || (!savedTheme && prefersDark)) {
+					document.documentElement.setAttribute('data-bs-theme', 'dark');
+				} else {
+					document.documentElement.setAttribute('data-bs-theme', 'light');
+				}
+			} catch (e) {}
+		})();
+	</script>
 	<div id="root"></div>
 	<script type="module" src="/src/main.jsx"></script>
 </body>

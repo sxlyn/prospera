@@ -8,27 +8,26 @@
  */
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { clearAuthSession } from '../utils/api';
+import { clearAuthSession, getCurrentUser } from '../utils/api';
 import LogoutModal from './LogoutModal';
 import ChangePasswordModal from './ChangePasswordModal';
+import { useTheme } from '../hooks/useTheme';
 
 function Sidebar() {
     const navigate = useNavigate();
+    const { theme, changeTheme } = useTheme();
     const [username, setUsername] = useState("");
     const [role, setRole] = useState(null);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
 
     useEffect(() => {
-        const userData = localStorage.getItem("user");
-        if (userData) {
-            try {
-                const user = JSON.parse(userData);
-                setUsername(user.username || user.name || "");
-                setRole(user.role || null);
-            } catch {
-                // Data corrupt — abaikan
-            }
+        // FIX (CRITICAL-FE-01): Gunakan getCurrentUser() dari api.js
+        // yang membaca dari sessionStorage secara konsisten (selaras dengan setAuthSession).
+        const user = getCurrentUser();
+        if (user) {
+            setUsername(user.username || user.name || "");
+            setRole(user.role || null);
         }
     }, []);
 
@@ -58,6 +57,24 @@ function Sidebar() {
         } else {
             window.dispatchEvent(new Event('replayTour'));
         }
+    };
+
+    const cycleTheme = () => {
+        if (theme === 'light') changeTheme('dark');
+        else if (theme === 'dark') changeTheme('system');
+        else changeTheme('light');
+    };
+
+    const getThemeIcon = () => {
+        if (theme === 'light') return 'fas fa-sun text-warning';
+        if (theme === 'dark') return 'fas fa-moon text-primary';
+        return 'fas fa-desktop text-secondary';
+    };
+
+    const getThemeText = () => {
+        if (theme === 'light') return 'Tema: Terang';
+        if (theme === 'dark') return 'Tema: Gelap';
+        return 'Tema: Sistem';
     };
 
     return (
@@ -107,6 +124,14 @@ function Sidebar() {
                 </div>
                 
                 <div className="px-3 mt-auto pt-3 border-top">
+                    <button 
+                        onClick={cycleTheme}
+                        className="nav-link w-100 border-0 bg-transparent text-start mb-2"
+                        style={{ cursor: 'pointer' }}
+                    >
+                        <i className={getThemeIcon()} />
+                        <span className="nav-text">{getThemeText()}</span>
+                    </button>
                     <button 
                         onClick={replayTour}
                         className="nav-link w-100 border-0 bg-transparent text-start mb-2"

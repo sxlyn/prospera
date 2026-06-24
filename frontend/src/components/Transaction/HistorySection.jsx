@@ -1,4 +1,4 @@
-import { formatRupiah } from '../../utils/format';
+import { formatRupiah, formatDatetime } from '../../utils/format';
 import ReportModal from './ReportModal';
 
 export default function HistorySection({
@@ -104,7 +104,7 @@ export default function HistorySection({
               ) : (
                 filteredHistory.map((tx) => (
                   <tr key={tx.transaction_id}>
-                    <td>{tx.transaction_datetime ? new Date(tx.transaction_datetime).toLocaleString('id-ID') : "-"}</td>
+                    <td>{formatDatetime(tx.transaction_datetime)}</td>
                     <td className="fw-bold">{formatRupiah(tx.total_amount)}</td>
                     <td>
                       <span className={getTransactionTypeLabel(tx) === "SELL" ? "badge safe" : "badge low"}>

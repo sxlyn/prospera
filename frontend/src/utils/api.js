@@ -9,23 +9,23 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:50
 // ==================== MANAJEMEN SESI ====================
 
 /**
- * Mengambil token JWT dari localStorage
+ * Mengambil token JWT dari sessionStorage (Anti-Zombie Session)
  */
-export const getToken = () => localStorage.getItem("token");
+export const getToken = () => sessionStorage.getItem("token");
 
 /**
- * Mengambil data user dari localStorage
+ * Mengambil data user dari sessionStorage
  */
 export const getCurrentUser = () => {
     try {
-        return JSON.parse(localStorage.getItem("user") || "null");
+        return JSON.parse(sessionStorage.getItem("user") || "null");
     } catch {
         return null;
     }
 };
 
 /**
- * Mengambil role user saat ini dari localStorage
+ * Mengambil role user saat ini dari sessionStorage
  * SECURITY FIX (F-S10): Validasi role terhadap whitelist yang diizinkan.
  * Jika role di-manipulasi manual (misal: 'admin', 'superuser'), akan ditolak.
  * @returns {'owner'|'karyawan'|null}
@@ -45,19 +45,19 @@ export const getUserRole = () => {
 };
 
 /**
- * Menyimpan sesi autentikasi (token + data user)
+ * Menyimpan sesi autentikasi (token + data user) ke sessionStorage
  */
 export const setAuthSession = (token, user) => {
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify(user));
+    sessionStorage.setItem("token", token);
+    sessionStorage.setItem("user", JSON.stringify(user));
 };
 
 /**
- * Menghapus seluruh sesi autentikasi
+ * Menghapus seluruh sesi autentikasi dari sessionStorage
  */
 export const clearAuthSession = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user");
 };
 
 /**
@@ -84,8 +84,13 @@ export const isTokenValid = () => {
             return false;
         }
 
-        // Decode payload tanpa verifikasi signature (itu tugas backend)
-        const payload = JSON.parse(atob(parts[1]));
+        // FIX (HIGH-FE-02): JWT menggunakan Base64URL (RFC 4648 §5), bukan Base64 standar.
+        // Karakter '+' → '-' dan '/' → '_' dalam Base64URL, tanpa padding '='.
+        // atob() native hanya memahami Base64 standar → konversi dulu sebelum decode.
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+        const payload = JSON.parse(atob(padded));
 
         // Cek expiry
         const isExpired = payload.exp * 1000 < Date.now();
@@ -285,7 +290,14 @@ export const getAnomalies = async () => {
 export const resolveAnomaly = async (payload) => {
     return await apiFetch('/smart-features/anomalies/resolve', {
         method: 'PUT',
-        body: payload
+        body: JSON.stringify(payload)
+    });
+};
+
+export const writeOffExpiredStock = async (product_id) => {
+    return await apiFetch('/smart-features/expiry/write-off', {
+        method: 'PUT',
+        body: JSON.stringify({ product_id })
     });
 };
 

@@ -2,6 +2,10 @@ const { User } = require('../models');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { JWT_EXPIRY } = require('../config/appConfig');
+// FIX (HIGH-01): Import utilitas masking data pribadi (UU PDP — Data Minimization)
+const { maskEmail } = require('../utils/privacy');
+// FIX (HIGH-02): Import Hard Purge Service untuk Right to be Forgotten (UU PDP)
+const { hardPurgeStore } = require('../services/purgeService');
 
 /**
  * Register — Pendaftaran publik untuk UMKM / Toko Baru
@@ -71,7 +75,9 @@ const login = async (req, res, next) => {
             user: {
                 id: user.user_id,
                 username: user.username,
-                email: user.email,
+                // FIX (HIGH-01): Email di-mask sebelum dikirim ke browser (UU PDP - Data Minimization)
+                // Raw email tetap di DB dan dipakai untuk login lookup — tidak pernah keluar via API
+                email: maskEmail(user.email),
                 role: user.role  // Frontend butuh ini untuk render sidebar
             }
         });
@@ -115,7 +121,8 @@ const createUser = async (req, res, next) => {
             user: {
                 id: newUser.user_id,
                 username: newUser.username,
-                email: newUser.email,
+                // FIX (HIGH-01): Email di-mask (UU PDP)
+                email: maskEmail(newUser.email),
                 role: newUser.role
             }
         });
@@ -184,10 +191,11 @@ const deleteUserById = async (req, res, next) => {
 };
 
 /**
- * deleteUser — User menghapus akun sendiri
- * SECURITY FIX (B-T04): Menambahkan safeguard dan cascade cleanup.
- * - Owner tidak bisa menghapus diri jika masih punya karyawan aktif
- * - Semua produk milik user akan ikut terhapus (cascade)
+ * deleteUser — User (Owner) menghapus seluruh akun dan data toko mereka
+ * FIX (HIGH-02): Ganti cascade cleanup yang tidak lengkap dengan hardPurgeStore().
+ * - SEBELUM: Hanya Product yang di-hard delete, data lain (Transaction, InventoryLog, dll) tertinggal
+ * - SESUDAH: hardPurgeStore() menyapu BERSIH semua data dalam 1 transaksi ACID
+ *   sesuai hak 'Right to be Forgotten' UU PDP Pasal 35.
  */
 const deleteUser = async (req, res, next) => {
     try {
@@ -198,25 +206,24 @@ const deleteUser = async (req, res, next) => {
             return res.status(404).json({ message: "Pengguna tidak ditemukan." });
         }
 
-        // Safeguard: Jika Owner, cek apakah masih punya karyawan aktif
-        if (user.role === 'owner') {
-            const { User: UserModel } = require('../models');
-            const activeEmployees = await UserModel.count({ where: { owner_id: idTarget } });
-            if (activeEmployees > 0) {
-                return res.status(400).json({ 
-                    message: `Anda masih memiliki ${activeEmployees} karyawan aktif. Hapus semua karyawan terlebih dahulu sebelum menghapus akun Owner.` 
-                });
-            }
+        // Hanya Owner yang berhak menghapus seluruh akun toko via endpoint ini
+        // Karyawan menggunakan endpoint terpisah (dihapus oleh Owner)
+        if (user.role !== 'owner') {
+            return res.status(403).json({ message: "Hanya Owner yang dapat menghapus akun toko secara permanen." });
         }
 
-        // Cascade cleanup: Hapus produk milik user ini
-        const { Product } = require('../models');
-        await Product.destroy({ where: { user_id_fk: req.user.store_id }, force: true });
+        // FIX (HIGH-02): Panggil Hard Purge Service — satu fungsi ACID yang menghapus
+        // semua data toko dalam urutan yang aman sesuai foreign key constraint.
+        // Tidak ada lagi pengecekan jumlah karyawan karena purgeService menangani semuanya.
+        const { sequelize } = require('../models');
+        const models = require('../models');
+        const purgeResult = await hardPurgeStore(sequelize, models, idTarget);
 
-        // Hapus user
-        await user.destroy();
-
-        res.status(200).json({ message: "Akun Anda berhasil dihapus beserta seluruh data terkait." });
+        res.status(200).json({ 
+            message: "Seluruh data akun toko Anda telah dihapus secara permanen sesuai hak Right to be Forgotten.",
+            purgedAt: purgeResult.purgedAt,
+            summary: purgeResult.summary
+        });
     } catch (error) {
         next(error);
     }
@@ -255,4 +262,30 @@ const changePassword = async (req, res, next) => {
     }
 };
 
-module.exports = { register, login, createUser, getAllUsers, deleteUserById, deleteUser, changePassword };
+/**
+ * logout — API Logout untuk membersihkan sesi di server (terutama overtime_unlocked_until)
+ */
+const logout = async (req, res, next) => {
+    try {
+        // Clear on Logout: Hapus jendela waktu lembur agar tidak diwariskan ke sesi berikutnya
+        await User.update(
+            { overtime_unlocked_until: null },
+            { where: { user_id: req.user.id } }
+        );
+
+        res.status(200).json({ message: "Logout berhasil. Sesi telah dibersihkan." });
+    } catch (error) {
+        next(error);
+    }
+};
+
+module.exports = {
+    register,
+    login,
+    createUser,
+    getAllUsers,
+    deleteUserById,
+    deleteUser,
+    changePassword,
+    logout
+};

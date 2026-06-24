@@ -6,9 +6,12 @@ const { getStockStatus } = require('../utils/stockHelper');
 const getAllProducts = async (req, res, next) => {
     try {
         const userId = req.user.store_id; 
-        // Default page 1, default limit 1000 untuk backward compatibility jika client belum pakai pagination
+        // Default page 1. FIX (HIGH-03): Hardcap limit produk untuk mencegah abuse.
+        // SmartPredict.jsx memanggil tanpa limit (butuh semua produk) → dapat default 500.
+        // Cap 500 cukup untuk produk UMKM manapun dan tidak menyebabkan memory issue.
+        const MAX_LIMIT = 500;
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 1000;
+        const limit = Math.min(parseInt(req.query.limit) || 500, MAX_LIMIT);
         const offset = (page - 1) * limit;
 
         const { count, rows } = await Product.findAndCountAll({
@@ -35,9 +38,13 @@ const getAllProducts = async (req, res, next) => {
         const { calculateRestockForProducts } = require('../services/aiRestockService');
         const restockSuggestions = await calculateRestockForProducts(userId, productIds, productDataMap);
 
-        // Terapkan fungsi dari Shared Helper ke setiap produk
+        // FIX (MED-02): Payload Diet — strip field internal/redundant dari response JSON.
+        // user_id_fk: sudah diketahui dari JWT, tidak perlu dikirim ulang ke browser.
+        // deletedAt: selalu null untuk active records (tidak informatif).
+        // updatedAt: frontend tidak butuh ini untuk render UI produk.
+        // Query tetap mengambil semua field (aiRestockService butuh data lengkap).
         const productsWithStatus = rows.map(p => {
-            const productData = p.toJSON();
+            const { user_id_fk, deletedAt, updatedAt, ...productData } = p.toJSON(); // eslint-disable-line no-unused-vars
             productData.stock_status = getStockStatus(productData.product_stock); 
             
             const aiData = restockSuggestions[productData.product_id] || { suggested_restock: 0, velocity: 0 };
@@ -117,6 +124,14 @@ const createProduct = async (req, res, next) => {
             return res.status(400).json({ message: `Produk dengan nama "${product_name}" sudah ada di toko Anda.` });
         }
 
+        let finalExpiredDate = expired_date || null;
+        if (Number(product_stock) > 0 && !finalExpiredDate) {
+            return res.status(400).json({ message: "Produk dengan stok awal lebih dari 0 wajib memiliki Tanggal Kedaluwarsa." });
+        }
+        if (Number(product_stock) === 0) {
+            finalExpiredDate = null;
+        }
+
         const newProduct = await Product.create({
             user_id_fk: userId,
             product_name: product_name,
@@ -124,7 +139,7 @@ const createProduct = async (req, res, next) => {
             product_price: product_price,
             product_stock: product_stock,
             category_id_fk: category_id_fk || null,
-            expired_date: expired_date || null
+            expired_date: finalExpiredDate
         });
 
         res.status(201).json({ 
@@ -158,6 +173,27 @@ const updateProduct = async (req, res, next) => {
             }
         }
 
+        // Fetch the existing product to check previous stock
+        const currentProduct = await Product.findOne({
+            where: { product_id: productId, user_id_fk: userId }
+        });
+
+        if (!currentProduct) {
+            return res.status(404).json({ message: "Produk tidak ditemukan atau bukan milik Anda." });
+        }
+
+        let finalExpiredDate = expired_date || null;
+
+        // Celah Restock: Dari 0 ke > 0 wajib ada expired_date
+        if (currentProduct.product_stock === 0 && Number(product_stock) > 0 && !finalExpiredDate) {
+            return res.status(400).json({ message: "Barang yang di-restock dari 0 wajib memiliki Tanggal Kedaluwarsa baru." });
+        }
+
+        // Auto-Nullification jika stok jadi 0
+        if (Number(product_stock) === 0) {
+            finalExpiredDate = null;
+        }
+
         // Cek duplikasi nama produk dengan mengecualikan produk ini sendiri
         const duplicateProduct = await Product.findOne({
             where: {
@@ -178,7 +214,7 @@ const updateProduct = async (req, res, next) => {
                 product_price: product_price,
                 product_stock: product_stock,
                 category_id_fk: category_id_fk || null,
-                expired_date: expired_date || null
+                expired_date: finalExpiredDate
             },
             {
                 where: { 

@@ -192,7 +192,7 @@ export default function UserManagement() {
                                         <td className="fw-bold">{user.username}</td>
                                         <td>{user.email}</td>
                                         <td>
-                                            <span className={`badge ${user.role === 'owner' ? 'bg-warning text-dark' : 'bg-info text-white'}`}
+                                            <span className={`badge ${user.role === 'owner' ? 'bg-warning text-body' : 'bg-info text-white'}`}
                                                   style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '8px' }}>
                                                 {user.role === 'owner' ? '👑 Owner' : '🧾 Karyawan'}
                                             </span>

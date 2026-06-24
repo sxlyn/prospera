@@ -10,7 +10,8 @@ const {
     getProfit,
     getTopProduct,
     getMonthly,
-    getLossProducts
+    getLossProducts,
+    getSpoilageLoss
 } = require("../controllers/analyticsController");
 
 // Import fungsi export dari exportController
@@ -25,6 +26,8 @@ router.get("/profit", authMiddleware, authorizeRole('owner'), getProfit);
 router.get("/top-product", authMiddleware, authorizeRole('owner'), getTopProduct);
 router.get("/monthly", authMiddleware, authorizeRole('owner'), getMonthly);
 router.get("/loss-products", authMiddleware, authorizeRole('owner'), getLossProducts);
+// FIX (SPOILAGE-01): Endpoint rincian kerugian kedaluwarsa (pemusnahan stok expired)
+router.get("/spoilage-log", authMiddleware, authorizeRole('owner'), getSpoilageLoss);
 
 router.get("/summary/export/excel", authMiddleware, authorizeRole('owner'), exportSummaryExcel); 
 router.get("/summary/export/csv", authMiddleware, authorizeRole('owner'), exportSummaryCsv);

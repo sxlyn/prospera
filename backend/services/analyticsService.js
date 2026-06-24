@@ -7,9 +7,9 @@
  * Jika ada bug fix atau perubahan filter, cukup ubah di satu tempat.
  */
 
-const { Transaction, TransactionDetail, Product } = require("../models");
-const { fn, col, literal } = require("sequelize");
-const { getDateFilter } = require("../utils/dateUtils");
+const { Transaction, TransactionDetail, Product, InventoryLog } = require("../models");
+const { Op, fn, col, literal } = require("sequelize");
+const { getDateFilter, buildWIBDateRange } = require("../utils/dateUtils");
 
 /**
  * Hitung breakdown status transaksi (success, pending, cancelled)
@@ -39,14 +39,18 @@ const getStatusBreakdown = async (startDate, endDate, userId) => {
 };
 
 /**
- * Hitung ringkasan keuangan (items_sold, revenue, total_profit)
+ * Hitung ringkasan keuangan (items_sold, revenue, total_profit, total_loss)
  * PENTING: Hanya menghitung transaksi PENJUALAN (transaction_type = 'sell')
+ * FIX (SPOILAGE-01): Menggabungkan 2 sumber kerugian:
+ *   1. Kerugian Jual Rugi    — dari TransactionDetail (selling_price < capital_cost)
+ *   2. Kerugian Kedaluwarsa  — dari InventoryLog (action = 'WRITE_OFF_EXPIRED')
  * @param {string} startDate 
  * @param {string} endDate 
  * @param {number} userId 
- * @returns {{ items_sold, revenue, total_profit }}
+ * @returns {{ items_sold, revenue, total_profit, total_loss, spoilage_loss }}
  */
 const getFinancialSummary = async (startDate, endDate, userId) => {
+    // Query 1: Kerugian dari transaksi (jual di bawah modal)
     const financialData = await TransactionDetail.findAll({
         include: [{
             model: Transaction,
@@ -63,12 +67,35 @@ const getFinancialSummary = async (startDate, endDate, userId) => {
         raw: true
     });
 
+    // Query 2: Kerugian dari pemusnahan stok kedaluwarsa (InventoryLog)
+    // FIX (SPOILAGE-01 + L1-02): Produk yang dimusnahkan karena expired = kerugian modal penuh.
+    // FIX (L1-02): Gunakan buildWIBDateRange — presisi 00:00:00 s/d 23:59:59 WIB
+    const spoilageWhere = { 
+        user_id_fk: userId, 
+        action: 'WRITE_OFF_EXPIRED' 
+    };
+    const wibRange = buildWIBDateRange(startDate, endDate);
+    if (wibRange) spoilageWhere.createdAt = wibRange;
+
+    const spoilageData = await InventoryLog.findAll({
+        where: spoilageWhere,
+        attributes: [[fn('SUM', col('spoilage_loss')), 'total_spoilage']],
+        raw: true
+    });
+
     const fin = financialData[0] || {};
+    const spoilage_loss = parseInt(spoilageData[0]?.total_spoilage) || 0;
+
     return {
         items_sold: parseInt(fin.items_sold) || 0,
-        revenue: parseFloat(fin.revenue) || 0,
-        total_profit: parseFloat(fin.total_profit) || 0,
-        total_loss: parseFloat(fin.total_loss) || 0
+        // FIX (CRITICAL-02): Gunakan parseInt (bukan parseFloat) untuk nilai uang.
+        // Kolom DB adalah BIGINT — tidak ada desimal nyata. parseFloat bisa menghasilkan
+        // 120000.00000000001 akibat floating-point representation error.
+        revenue: parseInt(fin.revenue) || 0,
+        total_profit: parseInt(fin.total_profit) || 0,
+        // total_loss = kerugian jual rugi + kerugian kedaluwarsa (gabungan 2 sumber)
+        total_loss: (parseInt(fin.total_loss) || 0) + spoilage_loss,
+        spoilage_loss  // Dikembalikan terpisah agar frontend bisa tampilkan breakdown
     };
 };
 
@@ -117,17 +144,19 @@ const getProductBreakdown = async (startDate, endDate, userId, options = {}) => 
         const result = {
             name: item["Product.product_name"],
             qty: parseInt(item.qty) || 0,
-            subtotal: parseFloat(item.subtotal) || 0
+            // FIX (CRITICAL-02): parseInt untuk nilai uang berbasis BIGINT kolom DB
+            subtotal: parseInt(item.subtotal) || 0
         };
 
         if (includeProfit) {
-            const profit = parseFloat(item.total_profit_product) || 0;
+            const profit = parseInt(item.total_profit_product) || 0;
+            // margin adalah rasio (%), bukan uang — tetap pakai float untuk presisi desimal
             const margin = result.subtotal > 0 ? ((profit / result.subtotal) * 100).toFixed(1) : 0;
             result.profit = profit;
             result.margin = margin + "%";
         }
         if (includeUnitPrice) {
-            result.unitPrice = parseFloat(item.unit_price) || 0;
+            result.unitPrice = parseInt(item.unit_price) || 0;
         }
 
         return result;

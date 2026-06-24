@@ -1,6 +1,6 @@
 const moment = require('moment-timezone');
 const bcrypt = require('bcryptjs');
-const { StoreSettings } = require('../models');
+const { User, StoreSettings } = require('../models');
 
 // Gunakan timezone default Indonesia, atau ambil dari .env
 const TIMEZONE = process.env.TIMEZONE || 'Asia/Jakarta';
@@ -26,20 +26,18 @@ exports.checkTimeAccess = async (req, res, next) => {
             return next();
         }
 
-        // --- CEK EMERGENCY PIN (BYPASS) ---
-        // Jika frontend mengirimkan emergency_pin di payload
-        if (req.body.emergency_pin && settings.emergency_pin) {
-            const isPinValid = await bcrypt.compare(req.body.emergency_pin, settings.emergency_pin);
-            if (isPinValid) {
-                return next(); // Lolos karena PIN darurat valid
-            } else {
-                return res.status(401).json({ message: "PIN Darurat salah." });
-            }
-        }
-
-        // Jika fitur lembur sedang aktif, izinkan transaksi
+        // Jika fitur lembur (global) sedang aktif, izinkan transaksi
         if (settings.is_overtime_active) {
             return next();
+        }
+
+        // --- CEK OVERTIME UNLOCKED UNTIL (BACKEND-DRIVEN SESSION) ---
+        const user = await User.findByPk(req.user.id);
+        if (user && user.overtime_unlocked_until) {
+            const unlockedUntil = moment(user.overtime_unlocked_until);
+            if (moment().isBefore(unlockedUntil)) {
+                return next(); // Sesi lembur masih aktif
+            }
         }
 
         // --- VALIDASI WAKTU ---

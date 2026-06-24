@@ -97,15 +97,15 @@ export default function StoreSettings() {
                             <h5 className="fw-bold mb-3"><i className="fas fa-clock me-2 text-warning"></i>Jam Operasional</h5>
                             <div className="mb-3">
                                 <label className="form-label text-muted small fw-bold">Jam Buka</label>
-                                <input type="time" step="1" className="form-control bg-light" name="open_hour" value={settings.open_hour} onChange={handleChange} required />
+                                <input type="time" step="1" className="form-control" name="open_hour" value={settings.open_hour} onChange={handleChange} required />
                             </div>
                             <div className="mb-3">
                                 <label className="form-label text-muted small fw-bold">Jam Tutup</label>
-                                <input type="time" step="1" className="form-control bg-light" name="close_hour" value={settings.close_hour} onChange={handleChange} required />
+                                <input type="time" step="1" className="form-control" name="close_hour" value={settings.close_hour} onChange={handleChange} required />
                             </div>
                             <div className="mb-3">
                                 <label className="form-label text-muted small fw-bold">Toleransi Waktu (Menit)</label>
-                                <input type="number" className="form-control bg-light" name="grace_period_minutes" value={settings.grace_period_minutes} onChange={handleChange} min="0" required />
+                                <input type="number" className="form-control" name="grace_period_minutes" value={settings.grace_period_minutes} onChange={handleChange} min="0" required />
                                 <div className="form-text">Batas waktu tambahan untuk kasir menyelesaikan transaksi setelah toko tutup.</div>
                             </div>
                         </div>
@@ -114,7 +114,7 @@ export default function StoreSettings() {
                             <h5 className="fw-bold mb-3"><i className="fas fa-shield-alt me-2 text-danger"></i>Keamanan</h5>
                             <div className="mb-3">
                                 <label className="form-label text-muted small fw-bold">PIN Darurat (Emergency PIN)</label>
-                                <input type="password" placeholder="Kosongkan jika tidak ingin mengubah" className="form-control bg-light" name="emergency_pin" value={settings.emergency_pin} onChange={handleChange} />
+                                <input type="password" placeholder="Kosongkan jika tidak ingin mengubah" className="form-control" name="emergency_pin" value={settings.emergency_pin} onChange={handleChange} />
                                 <div className="form-text">PIN ini digunakan oleh kasir untuk transaksi di luar jam operasional (wajib diisi oleh kasir saat konfirmasi).</div>
                             </div>
                         </div>

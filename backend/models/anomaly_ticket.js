@@ -41,6 +41,14 @@ module.exports = (sequelize, DataTypes) => {
   }, {
     tableName: 'Anomaly_Tickets',
     timestamps: true, // we want createdAt
+    // FIX (HIGH-09): Index kritis untuk anomaly detection.
+    // checkTimeAnomaly + checkPriceAnomaly memanggil findOne({ reference_id, anomaly_type })
+    // pada SETIAP pembuatan transaksi — tanpa index ini = full table scan tiap transaksi.
+    indexes: [
+      { fields: ['reference_id', 'anomaly_type'] },  // Deduplication check (dipanggil tiap transaksi)
+      { fields: ['user_id_fk', 'status'] },          // getAnomalies: filter per toko + status OPEN
+      { fields: ['user_id_fk'] }                     // Filter per toko
+    ]
   });
 
   AnomalyTicket.associate = (models) => {

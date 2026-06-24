@@ -48,6 +48,10 @@ module.exports = (sequelize, DataTypes) => {
         model: 'Users',
         key: 'user_id'
       }
+    },
+    overtime_unlocked_until: {
+      type: DataTypes.DATE,
+      allowNull: true
     }
   }, {
     tableName: 'Users',

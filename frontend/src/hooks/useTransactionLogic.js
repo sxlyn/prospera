@@ -55,8 +55,28 @@ export function useTransactionLogic() {
 
     // ========== INITIAL FETCH ==========
     useEffect(() => {
-        fetchProducts();
-        historyHook.fetchHistory("ALL", "", "");
+        // FIX (MEDIUM-11): AbortController mencegah memory leak jika component
+        // unmount sebelum fetch selesai (misal: user navigasi keluar saat loading).
+        const controller = new AbortController();
+
+        const initialize = async () => {
+            try {
+                const data = await apiFetch("/products", { signal: controller.signal });
+                setProducts(data.products ? data.products : (Array.isArray(data) ? data : []));
+            } catch (error) {
+                // AbortError adalah expected — abaikan. Error lain tetap di-log.
+                if (error.name !== 'AbortError') {
+                    console.error("Gagal memuat produk:", error);
+                }
+            }
+            // History tidak perlu signal karena historyHook sudah mengelola state-nya sendiri
+            historyHook.fetchHistory("ALL", "", "");
+        };
+
+        initialize();
+
+        // Cleanup: batalkan fetch yang in-flight saat component unmount
+        return () => controller.abort();
     }, []);
 
     // ========== RETURN IDENTIK dengan versi lama ==========
@@ -122,6 +142,11 @@ export function useTransactionLogic() {
         setShowReportModal: historyHook.setShowReportModal,
 
         // Shared
-        getTransactionTypeLabel
+        getTransactionTypeLabel,
+
+        // Overtime Auth
+        overtimeModal: cartHook.overtimeModal,
+        setOvertimeModal: cartHook.setOvertimeModal,
+        submitOvertimeAuth: cartHook.submitOvertimeAuth
     };
 }

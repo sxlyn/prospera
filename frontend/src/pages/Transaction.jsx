@@ -5,6 +5,7 @@ import HistorySection from "../components/Transaction/HistorySection";
 import TransactionDetailModal from "../components/Transaction/TransactionDetailModal";
 import { useTransactionLogic } from "../hooks/useTransactionLogic"; 
 import { printReceipt, getTransactionTypeLabel } from "../utils/transactionHelpers"; // <-- Panggil fungsi print
+import OvertimeAuthModal from "../components/Transaction/OvertimeAuthModal";
 
 export default function Transaction() {
   const logic = useTransactionLogic();
@@ -54,6 +55,13 @@ export default function Transaction() {
         <HistorySection {...logic} getTransactionTypeLabel={getTransactionTypeLabel} />
         <TransactionDetailModal {...logic} getTransactionTypeLabel={getTransactionTypeLabel} />
         
+        <OvertimeAuthModal 
+            isOpen={logic.overtimeModal.isOpen} 
+            errorMsg={logic.overtimeModal.errorMsg} 
+            onClose={() => logic.setOvertimeModal({ isOpen: false, errorMsg: '' })} 
+            onSubmit={logic.submitOvertimeAuth} 
+            isSubmitting={logic.saving} 
+        />
       </div>
   );
 }

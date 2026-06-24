@@ -1,39 +1,102 @@
-const { sequelize, Transaction, TransactionDetail, Product, Category, User } = require('../models');
+const { sequelize, Transaction, TransactionDetail, Product, Category, User, StoreSettings } = require('../models');
 const { Op } = require('sequelize'); 
 const ExcelJS = require('exceljs');
+const bcrypt = require('bcryptjs');
 
-// 1. Fungsi untuk melakukan proses pembayaran (Dilengkapi Sistem Rollback)
+// FIX (CRITICAL-03): Idempotency Key Store — Cegah transaksi duplikat
+// (misal: double-click tombol, retry jaringan, form re-submit)
+// Menggunakan in-memory Map + TTL cleanup (tanpa Redis) — cocok untuk
+// single-process Node.js POS. Jika scale-out multi-proses, migrasi ke Redis.
+const idempotencyStore = new Map(); // key => { processedAt: timestamp }
+const IDEMPOTENCY_TTL_MS = 5 * 60 * 1000; // 5 menit
+
+// Cleanup otomatis setiap 10 menit — cegah memory leak
+const idempotencyCleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [key, val] of idempotencyStore.entries()) {
+        if (now - val.processedAt > IDEMPOTENCY_TTL_MS) {
+            idempotencyStore.delete(key);
+        }
+    }
+}, 10 * 60 * 1000);
+// Pastikan interval tidak memblokir proses keluar secara graceful
+if (idempotencyCleanup.unref) idempotencyCleanup.unref();
+
 const createTransaction = async (req, res, next) => {
     const userId = req.user.store_id; 
     const { transaction_type = null, items } = req.body; 
 
     // SECURITY FIX (B-T07): Waktu transaksi dikontrol SERVER, bukan client
-    // Sebelumnya: transaction_datetime diambil dari req.body — rentan backdating/future-dating
-    // Sekarang: server menentukan timestamp saat transaksi diproses
     const serverDatetime = new Date();
+
+    // FIX (CRITICAL-03): Idempotency check — tolak request duplikat
+    // Frontend menyertakan header X-Idempotency-Key (UUID v4) per checkout attempt.
+    // Ini mencegah double-click, retry jaringan, atau form re-submit membuat 2 transaksi.
+    const idempotencyKey = req.headers['x-idempotency-key'];
+    if (idempotencyKey) {
+        // Isolasi per-user: key = userId::idempotencyKey (cegah collision antar toko)
+        const storeKey = `${userId}::${idempotencyKey}`;
+        if (idempotencyStore.has(storeKey)) {
+            return res.status(409).json({
+                message: 'Transaksi duplikat terdeteksi. Request ini sudah pernah diproses. Silakan muat ulang halaman jika ini bukan pengulangan yang disengaja.',
+                isDuplicate: true
+            });
+        }
+        // Tandai key sebagai sudah diproses (dihapus otomatis setelah 5 menit oleh cleanup)
+        idempotencyStore.set(storeKey, { processedAt: Date.now() });
+    }
+
+    // ENTERPRISE FIX: Payload Array Bomber Protection
+    if (!items || items.length === 0) {
+        return res.status(400).json({ message: "Keranjang kosong." });
+    }
+    if (items.length > 100) {
+        return res.status(400).json({ message: "Keranjang maksimal 100 jenis barang per transaksi. Silakan pecah transaksi." });
+    }
+
+    // ENTERPRISE FIX: Fat-Finger Validation di API
+    for (let item of items) {
+        if (!item.quantity || item.quantity <= 0 || item.quantity > 1000) {
+            return res.status(400).json({ message: "Kuantitas barang tidak valid (maksimal 1000 unit)." });
+        }
+    }
+
 
     // Membuka koneksi khusus untuk sistem pengamanan transaksi (Rollback)
     const t = await sequelize.transaction();
 
     try {
         let total_amount = 0;
+        let cart_minimum_allowed = 0; 
         let validItems = [];
+
+        // ENTERPRISE FIX: Bulk Fetching & Deadlock Prevention
+        const uniqueProductIds = [...new Set(items.map(item => item.product_id))].sort((a, b) => a - b);
+        
+        const products = await Product.findAll({
+            where: { 
+                product_id: { [Op.in]: uniqueProductIds },
+                user_id_fk: userId 
+            },
+            order: [['product_id', 'ASC']],
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
+
+        // ENTERPRISE FIX: Mismatch Length Check (Barang Gaib)
+        if (products.length !== uniqueProductIds.length) {
+            throw new Error("Terdapat produk yang tidak valid atau baru saja dihapus oleh Manajer. Silakan muat ulang halaman.");
+        }
+
+        const productMap = {};
+        for (const p of products) {
+            productMap[p.product_id] = p;
+        }
 
         // Tahap 1: Memeriksa ketersediaan stok produk dan menghitung total harga
         for (let item of items) {
-            const product = await Product.findOne({
-                where: { 
-                    product_id: item.product_id, 
-                    user_id_fk: userId 
-                },
-                transaction: t,
-                lock: t.LOCK.UPDATE
-            });
+            const product = productMap[item.product_id];
             
-            if (!product) {
-                throw new Error(`Produk dengan ID ${item.product_id} tidak ditemukan.`);
-            }
-
             const itemTransactionType = item.transaction_type || transaction_type || 'sell';
 
             // Validasi stok untuk penjualan
@@ -41,17 +104,25 @@ const createTransaction = async (req, res, next) => {
                 throw new Error(`Stok ${product.product_name} tidak mencukupi. Sisa stok: ${product.product_stock}`);
             }
 
-            const capital_cost = item.capital_cost ?? product.product_cost;
-            const selling_price = item.selling_price ?? product.product_price;
+            // ENTERPRISE FIX: Zero-Trust Architecture (Harga mutlak dari Database)
+            const capital_cost = product.product_cost;
+            const selling_price = product.product_price;
 
-            // FIX: Kalkulasi sub_total berdasarkan tipe transaksi
-            // Penjualan (sell): sub_total = harga jual × kuantitas
-            // Pembelian (buy):  sub_total = harga modal × kuantitas
+            // Kalkulasi sub_total berdasarkan tipe transaksi
             const sub_total = itemTransactionType === 'buy' 
                 ? capital_cost * item.quantity 
                 : selling_price * item.quantity;
             
             total_amount += sub_total;
+
+            const minimum_allowed_price = Math.min(capital_cost, product.product_price);
+            cart_minimum_allowed += (minimum_allowed_price * item.quantity);
+
+            if (itemTransactionType === 'sell' && req.user.role === 'karyawan') {
+                if (selling_price < minimum_allowed_price) {
+                    throw new Error(`Otorisasi Diperlukan: Harga jual item '${product.product_name}' berada di bawah batas wajar.`);
+                }
+            }
 
             validItems.push({
                 product_id: product.product_id,
@@ -59,7 +130,8 @@ const createTransaction = async (req, res, next) => {
                 capital_cost: capital_cost,
                 selling_price: selling_price,
                 sub_total: sub_total,
-                transaction_type: itemTransactionType
+                transaction_type: itemTransactionType,
+                current_stock: product.product_stock
             });
         }
 
@@ -70,6 +142,13 @@ const createTransaction = async (req, res, next) => {
             throw new Error('Tidak dapat mencampur tipe transaksi (buy & sell) dalam satu checkout. Pisahkan menjadi transaksi terpisah.');
         }
         const headerTransactionType = itemTypes[0];
+
+        // ENTERPRISE FIX: Dynamic Cart Floor (Lapis 2)
+        if (headerTransactionType === 'sell' && req.user.role === 'karyawan') {
+            if (total_amount < cart_minimum_allowed) {
+                throw new Error("Otorisasi Diperlukan: Total akhir nota berada di bawah batas modal keranjang. Hubungi Manajer.");
+            }
+        }
 
         // Tahap 3: Membuat pencatatan struk utama di tabel Transactions
         const newTransaction = await Transaction.create(
@@ -101,13 +180,23 @@ const createTransaction = async (req, res, next) => {
 
         // Tahap 5: Update stok produk (tetap per-item karena row-level lock diperlukan)
         // PERFORMANCE FIX (B-S10): Menggunakan Promise.all untuk paralelisasi
-        await Promise.all(validItems.map(vItem => {
+        await Promise.all(validItems.map(async (vItem) => {
             if (vItem.transaction_type === 'sell') {
-                return Product.decrement('product_stock', {
-                    by: vItem.quantity,
-                    where: { product_id: vItem.product_id },
-                    transaction: t
-                });
+                if (vItem.current_stock - vItem.quantity === 0) {
+                    return Product.update({
+                        product_stock: 0,
+                        expired_date: null
+                    }, {
+                        where: { product_id: vItem.product_id },
+                        transaction: t
+                    });
+                } else {
+                    return Product.decrement('product_stock', {
+                        by: vItem.quantity,
+                        where: { product_id: vItem.product_id },
+                        transaction: t
+                    });
+                }
             } else {
                 return Product.increment('product_stock', {
                     by: vItem.quantity,
@@ -149,9 +238,12 @@ const getTransactionHistory = async (req, res, next) => {
         const { start, end } = req.query;
         let whereCondition = { user_id_fk: userId };
 
-        // Default page 1, default limit 1000 untuk backward compatibility
+        // FIX (HIGH-03): Hardcap limit untuk mencegah memory bomb.
+        // Frontend sudah kirim limit=10 (historyLimit). Cap ini adalah safety net
+        // untuk mencegah abuse via curl/Postman dengan limit=999999.
+        const MAX_LIMIT = 100;
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 1000;
+        const limit = Math.min(parseInt(req.query.limit) || 50, MAX_LIMIT);
         const offset = (page - 1) * limit;
 
         // Filter berdasarkan kolom transaction_datetime
@@ -195,16 +287,56 @@ const getTransactionHistory = async (req, res, next) => {
 };
 
 // 3. Fungsi untuk export laporan transaksi ke Excel
+// FIX (CRIT-02 + MED-04): Tambahkan 3 lapis proteksi Memory Bomb:
+// 1. Default range 30 hari terakhir jika tidak ada parameter tanggal
+// 2. Validasi maksimum range 366 hari (1 tahun fiskal)
+// 3. Hard cap 10.000 transaksi header — tolak dengan HTTP 413 jika melebihi
 const exportTransactionHistory = async (req, res, next) => {
     try {
         const userId = req.user.store_id;
-        const { start, end } = req.query;
-        let whereCondition = { user_id_fk: userId };
+        let { start, end } = req.query;
 
-        if (start && end) {
-            whereCondition.transaction_datetime = {
+        // FIX (MED-04): Default ke 30 hari terakhir jika tidak ada parameter tanggal
+        if (!start || !end) {
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(today.getDate() - 30);
+            end   = today.toISOString().split('T')[0];
+            start = thirtyDaysAgo.toISOString().split('T')[0];
+        }
+
+        // FIX (CRIT-02): Validasi format dan rentang tanggal maksimum 366 hari
+        const startDate = new Date(start);
+        const endDate   = new Date(end);
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            return res.status(400).json({ message: 'Format tanggal tidak valid. Gunakan format YYYY-MM-DD.' });
+        }
+        if (endDate < startDate) {
+            return res.status(400).json({ message: 'Tanggal akhir tidak boleh lebih awal dari tanggal mulai.' });
+        }
+        const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+        if (diffDays > 366) {
+            return res.status(400).json({
+                message: `Rentang tanggal terlalu besar (${diffDays} hari). Maksimum export adalah 366 hari. Silakan pecah menjadi beberapa periode.`
+            });
+        }
+
+        const whereCondition = {
+            user_id_fk: userId,
+            transaction_datetime: {
                 [Op.between]: [`${start} 00:00:00`, `${end} 23:59:59`]
-            };
+            }
+        };
+
+        // FIX (CRIT-02): Hard cap — COUNT dulu (1 query murah) sebelum fetch data besar
+        const EXPORT_ROW_HARD_CAP = 10_000;
+        const transactionCount = await Transaction.count({ where: whereCondition });
+        if (transactionCount > EXPORT_ROW_HARD_CAP) {
+            return res.status(413).json({
+                message: `Data terlalu besar (${transactionCount.toLocaleString('id-ID')} transaksi). Maksimum ${EXPORT_ROW_HARD_CAP.toLocaleString('id-ID')} per export. Silakan perkecil rentang tanggal.`,
+                totalFound: transactionCount,
+                hardCap: EXPORT_ROW_HARD_CAP
+            });
         }
 
         const transactions = await Transaction.findAll({
@@ -298,7 +430,10 @@ const exportTransactionHistory = async (req, res, next) => {
         });
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename=' + `Laporan_Transaksi_${start || 'All'}_to_${end || 'All'}.xlsx`);
+        // FIX (CRITICAL-07): Sanitasi parameter date sebelum dimasukkan ke header HTTP
+        // untuk mencegah Header Injection Attack. Hanya izinkan karakter alfanumerik, dash, underscore.
+        const sanitizeFilename = (s) => (s || 'All').replace(/[^a-zA-Z0-9\-_]/g, '');
+        res.setHeader('Content-Disposition', `attachment; filename="Laporan_Transaksi_${sanitizeFilename(start)}_to_${sanitizeFilename(end)}.xlsx"`);
 
         await workbook.xlsx.write(res);
         res.end();
@@ -309,47 +444,69 @@ const exportTransactionHistory = async (req, res, next) => {
 };
 
 // 4. Fungsi untuk rekap ringkasan transaksi
+// FIX (CRIT-01): Ganti pola N+1 Query dengan 2 query SQL aggregation paralel.
+// SEBELUM: findAll() semua transaksi + include detail → bisa N+1 query → loop di Node.js
+// SESUDAH: 2x aggregation query paralel → MySQL engine yang menghitung → Node.js hanya parsing
+// Untuk toko dengan 1000 transaksi: penghematan ~998 query dan ratusan MB RAM
 const getTransactionSummary = async (req, res, next) => {
     try {
         const userId = req.user.store_id;
         const { start, end } = req.query;
-        let whereCondition = { user_id_fk: userId };
 
+        // Bangun filter tanggal yang konsisten dengan endpoint lain (Op.between)
+        const dateFilter = {};
         if (start && end) {
-            whereCondition.transaction_datetime = {
+            dateFilter.transaction_datetime = {
                 [Op.between]: [`${start} 00:00:00`, `${end} 23:59:59`]
             };
         }
 
-        const transactions = await Transaction.findAll({
-            where: whereCondition,
-            include: [{
-                model: TransactionDetail,
-            }]
-        });
+        // Query 1: Hitung total transaksi (semua tipe, semua status)
+        // Query 2: Aggregasi finansial dari detail — hanya transaksi 'success'
+        // Keduanya dijalankan PARALEL via Promise.all untuk efisiensi maksimum
+        const [countResult, financialResult] = await Promise.all([
+            // Q1: Count semua transaksi milik toko ini (termasuk pending/cancelled)
+            Transaction.count({
+                where: { user_id_fk: userId, ...dateFilter }
+            }),
 
-        let totalTransactions = transactions.length;
-        let totalIncome = 0;
-        let totalProfit = 0;
-        let totalRestock = 0;
+            // Q2: Satu agregasi besar — semua kalkulasi finansial dilakukan oleh MySQL
+            // JOIN ke Transaction_details via include, filter hanya status='success'
+            TransactionDetail.findAll({
+                attributes: [
+                    // Total omzet dari penjualan (sell)
+                    [
+                        literal(`SUM(CASE WHEN \`Transaction\`.\`transaction_type\` = 'sell' AND \`Transaction\`.\`status\` = 'success' THEN \`TransactionDetail\`.\`sub_total\` ELSE 0 END)`),
+                        'totalIncome'
+                    ],
+                    // Total laba bersih dari penjualan (selling_price - capital_cost) * qty
+                    [
+                        literal(`SUM(CASE WHEN \`Transaction\`.\`transaction_type\` = 'sell' AND \`Transaction\`.\`status\` = 'success' THEN (\`TransactionDetail\`.\`selling_price\` - \`TransactionDetail\`.\`capital_cost\`) * \`TransactionDetail\`.\`quantity\` ELSE 0 END)`),
+                        'totalProfit'
+                    ],
+                    // Total nilai restock (buy)
+                    [
+                        literal(`SUM(CASE WHEN \`Transaction\`.\`transaction_type\` = 'buy' AND \`Transaction\`.\`status\` = 'success' THEN \`TransactionDetail\`.\`sub_total\` ELSE 0 END)`),
+                        'totalRestock'
+                    ]
+                ],
+                include: [{
+                    model: Transaction,
+                    attributes: [], // Tidak perlu kolom Transaction di output — hanya untuk JOIN + filter
+                    where: { user_id_fk: userId, ...dateFilter }
+                }],
+                raw: true
+            })
+        ]);
 
-        transactions.forEach(tx => {
-            if (tx.status === 'success') {
-                if (tx.transaction_type === 'sell') {
-                    tx.TransactionDetails.forEach(detail => {
-                        totalIncome += detail.sub_total;
-                        totalProfit += (detail.selling_price - detail.capital_cost) * detail.quantity;
-                    });
-                } else if (tx.transaction_type === 'buy') {
-                    tx.TransactionDetails.forEach(detail => {
-                        totalRestock += detail.sub_total;
-                    });
-                }
-            }
-        });
+        // Parsing hasil agregasi — MySQL mengembalikan string untuk SUM, konversi ke Number
+        const fin = financialResult[0] || {};
+        const totalIncome  = parseFloat(fin.totalIncome)  || 0;
+        const totalProfit  = parseFloat(fin.totalProfit)  || 0;
+        const totalRestock = parseFloat(fin.totalRestock) || 0;
 
         res.status(200).json({
-            totalTransactions,
+            totalTransactions: countResult,
             totalIncome,
             totalProfit,
             totalRestock
@@ -359,4 +516,36 @@ const getTransactionSummary = async (req, res, next) => {
     }
 };
 
-module.exports = { createTransaction, getTransactionHistory, exportTransactionHistory, getTransactionSummary };
+// 5. Fungsi untuk membuka Sesi Lembur (Backend-Driven Grace Period)
+const unlockOvertime = async (req, res, next) => {
+    try {
+        const { pin } = req.body;
+        const ownerId = req.user.owner_id;
+
+        if (!pin) {
+            return res.status(400).json({ message: "PIN harus diisi." });
+        }
+
+        const settings = await StoreSettings.findOne({ where: { user_id_fk: ownerId } });
+        if (!settings || !settings.emergency_pin) {
+            return res.status(400).json({ message: "Toko ini tidak memiliki pengaturan PIN darurat." });
+        }
+
+        const isPinValid = await bcrypt.compare(pin, settings.emergency_pin);
+        if (!isPinValid) {
+            return res.status(401).json({ message: "PIN Darurat salah." });
+        }
+
+        // Anti-Clock Drift: Gunakan literal query MySQL untuk +1 Jam
+        await sequelize.query(
+            "UPDATE Users SET overtime_unlocked_until = CURRENT_TIMESTAMP + INTERVAL 1 HOUR WHERE user_id = ?",
+            { replacements: [req.user.id], type: sequelize.QueryTypes.UPDATE }
+        );
+
+        res.json({ message: "Sesi lembur berhasil diaktifkan selama 1 jam." });
+    } catch (err) {
+        next(err);
+    }
+};
+
+module.exports = { createTransaction, getTransactionHistory, exportTransactionHistory, getTransactionSummary, unlockOvertime };

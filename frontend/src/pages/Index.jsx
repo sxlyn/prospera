@@ -24,6 +24,7 @@ function Index() {
         summary: {},
         products: [],
         monthly: [],
+        anomalies: { timeAnomalies: [], priceAnomalies: [] },
     });
 
     const setView = (newView) => {
@@ -43,6 +44,24 @@ function Index() {
 
     // API call hanya terpicu oleh applied state (setelah debounce selesai)
     useEffect(() => {
+        const fetchSummaryData = async () => {
+            try {
+                const params = new URLSearchParams();
+                if (appliedStartDate) params.append('startDate', appliedStartDate);
+                if (appliedEndDate) params.append('endDate', appliedEndDate);
+                
+                const query = params.toString() ? `?${params.toString()}` : '';
+                const [summaryRes, anomaliesRes] = await Promise.all([
+                    apiFetch(`/analytics/summary${query}`),
+                    apiFetch(`/smart-features/anomalies`)
+                ]);
+                
+                setData(prev => ({ ...prev, summary: summaryRes.summary, anomalies: anomaliesRes }));
+            } catch (err) {
+                console.error("Gagal menyegarkan summary (Event Listener):", err);
+            }
+        };
+
         const fetchData = async () => {
             try {
                 setLoading(true);
@@ -53,16 +72,18 @@ function Index() {
                 const query = params.toString() ? `?${params.toString()}` : '';
                 const topProductQuery = params.toString() ? `?${params.toString()}&limit=10` : '?limit=10';
 
-                const [summaryRes, topProductsRes, monthlyRes] = await Promise.all([
+                const [summaryRes, topProductsRes, monthlyRes, anomaliesRes] = await Promise.all([
                     apiFetch(`/analytics/summary${query}`),
                     apiFetch(`/analytics/top-product${topProductQuery}`),
-                    apiFetch(`/analytics/monthly${query}`)
+                    apiFetch(`/analytics/monthly${query}`),
+                    apiFetch(`/smart-features/anomalies`)
                 ]);
 
                 setData({
                     summary: summaryRes.summary,
                     products: topProductsRes,
                     monthly: monthlyRes,
+                    anomalies: anomaliesRes,
                 });
             } catch (err) {
                 setError(formatError(err));
@@ -72,6 +93,9 @@ function Index() {
         };
 
         fetchData();
+
+        window.addEventListener('fraudDataUpdated', fetchSummaryData);
+        return () => window.removeEventListener('fraudDataUpdated', fetchSummaryData);
     }, [appliedStartDate, appliedEndDate]);
 
     const totalProfit = data.summary.total_profit || 0;
@@ -80,6 +104,15 @@ function Index() {
     const totalSales = data.summary.revenue || 0;
     const totalTrans = data.summary.total_transaction || 0;
     const margin = totalSales > 0 ? ((netIncome / totalSales) * 100).toFixed(1) : 0;
+    
+    // Anomaly calculation
+    const openTimeAnomalies = (data.anomalies?.timeAnomalies || []).filter(item => item.status === 'OPEN');
+    const openPriceAnomalies = (data.anomalies?.priceAnomalies || []).filter(item => item.status === 'OPEN');
+    const hasOpenAnomalies = openTimeAnomalies.length > 0 || openPriceAnomalies.length > 0;
+    const totalOpenLoss = openPriceAnomalies.reduce((sum, item) => {
+        const loss = item.capital_cost - item.selling_price;
+        return sum + (loss > 0 ? loss * (item.quantity || 1) : 0);
+    }, 0);
     
     // FIX: Gunakan data REAL dari API, bukan mock
     const sortedProducts = data.products.map(p => ({
@@ -152,18 +185,18 @@ function Index() {
                         <div className="card border-0 shadow-sm rounded-4 p-3 mb-3 d-flex flex-row justify-content-between align-items-center">
                             <div>
                                 <div className="text-muted small mb-1">Total Pendapatan</div>
-                                <div className="h4 fw-bold m-0 text-dark">{formatRupiah(totalSales)}</div>
+                                <div className="h4 fw-bold m-0 text-body">{formatRupiah(totalSales)}</div>
                             </div>
                             <div className="bg-success bg-opacity-10 text-success rounded-circle d-flex justify-content-center align-items-center" style={{width: '45px', height: '45px'}}>
                                 <i className="fas fa-wallet fs-5"></i>
                             </div>
                         </div>
 
-                        <Link to="/bi-analytics" className="text-decoration-none text-dark">
+                        <Link to="/bi-analytics" className="text-decoration-none text-body">
                             <div className="card border-0 shadow-sm rounded-4 p-3 mb-3 d-flex flex-row justify-content-between align-items-center card-hover-effect">
                                 <div>
                                     <div className="text-muted small mb-1">Jumlah Transaksi</div>
-                                    <div className="h4 fw-bold m-0 text-dark">{totalTrans.toLocaleString('id-ID')}</div>
+                                    <div className="h4 fw-bold m-0 text-body">{totalTrans.toLocaleString('id-ID')}</div>
                                 </div>
                                 <i className="fas fa-chevron-right text-muted"></i>
                             </div>
@@ -172,17 +205,35 @@ function Index() {
 
                     <div className="mb-3" data-tour="tour-fraud">
                         <span className="badge bg-danger bg-opacity-75 rounded-pill px-3 py-2 mb-2">Risk Management</span>
-                        <Link to="/smart-predict" className="text-decoration-none text-dark">
-                            <div className="card border-0 shadow-sm rounded-4 p-3 mb-3 d-flex flex-row justify-content-between align-items-center card-hover-effect">
-                                <div>
-                                    <div className="fw-bold text-dark mb-1">Deteksi Anomali / Fraud</div>
-                                    <div className="h4 fw-bold text-danger m-0">{formatRupiah(totalLoss)}</div>
-                                    <div className="text-muted small mt-1">Klik untuk melihat detail anomali</div>
+                        <Link to="/smart-predict" className="text-decoration-none text-body">
+                            {hasOpenAnomalies ? (
+                                <div className="card border-0 shadow-sm rounded-4 p-3 mb-3 d-flex flex-row justify-content-between align-items-center card-hover-effect">
+                                    <div>
+                                        <div className="fw-bold text-body mb-1">Deteksi Anomali / Fraud</div>
+                                        {totalOpenLoss > 0 ? (
+                                            <div className="h4 fw-bold text-danger m-0">{formatRupiah(totalOpenLoss)}</div>
+                                        ) : (
+                                            <div className="h5 fw-bold text-warning m-0">{openTimeAnomalies.length} Kasus Waktu</div>
+                                        )}
+                                        <div className="text-muted small mt-1">Klik untuk melihat detail anomali</div>
+                                    </div>
+                                    <div className="bg-danger bg-opacity-10 text-danger rounded-circle d-flex justify-content-center align-items-center" style={{width: '45px', height: '45px'}}>
+                                        <i className="fas fa-exclamation-triangle fs-5"></i>
+                                    </div>
                                 </div>
-                                <div className="bg-danger bg-opacity-10 text-danger rounded-circle d-flex justify-content-center align-items-center" style={{width: '45px', height: '45px'}}>
-                                    <i className="fas fa-exclamation-triangle fs-5"></i>
+                            ) : (
+                                <div className="card border-start border-success border-4 shadow-sm rounded-4 p-3 mb-3 card-hover-effect">
+                                    <div className="d-flex align-items-center">
+                                        <div className="bg-success bg-opacity-10 text-success rounded-circle d-flex justify-content-center align-items-center me-3" style={{width: '45px', height: '45px'}}>
+                                            <i className="fas fa-shield-check fs-5"></i>
+                                        </div>
+                                        <div>
+                                            <div className="fw-bold text-success mb-1">Fraud Detection Aktif</div>
+                                            <div className="text-muted small m-0">Klik untuk melihat riwayat audit</div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </Link>
 
                         <SmartExpiryWidget isDashboard={true} />
@@ -191,7 +242,7 @@ function Index() {
                     <div className="mb-3">
                         <span className="badge bg-primary rounded-pill px-3 py-2 mb-2">Profit & Loss Tracking</span>
                         
-                        <Link to="/bi-analytics" className="text-decoration-none text-dark">
+                        <Link to="/bi-analytics" className="text-decoration-none text-body">
                             <div className="card border-0 shadow-sm rounded-4 p-3 mb-3 d-flex flex-row justify-content-between align-items-center card-hover-effect">
                                 <div>
                                     <div className="text-muted small mb-1">Laba Bersih</div>
@@ -209,7 +260,7 @@ function Index() {
                     </div>
                 </div>
                 <div className="col-lg-8 col-md-7 d-flex flex-column">
-                    <ul className="nav nav-pills mb-4 bg-white p-2 rounded shadow-sm">
+                    <ul className="nav nav-pills mb-4 bg-body p-2 rounded shadow-sm">
                         <li className="nav-item">
                             <button className={`nav-link ${view === 'overview' ? 'active' : ''}`} type="button" onClick={() => setView('overview')}>
                                 <i className="fas fa-list me-2" />Performa Produk
@@ -239,7 +290,7 @@ function Index() {
                                         <tbody className="border-top-0">
                                             {sortedProducts.length > 0 ? sortedProducts.slice(0, 4).map((product) => (
                                                 <tr key={product.id} className="align-middle">
-                                                    <td className="fw-bold text-dark">{product.name}</td>
+                                                    <td className="fw-bold text-body">{product.name}</td>
                                                     <td>{product.volume.toLocaleString('id-ID')} unit</td>
                                                     <td className="text-success fw-bold">{formatRupiah(product.profit)}</td>
                                                     <td>
@@ -252,7 +303,7 @@ function Index() {
                                             <tr>
                                                 <td colSpan="4" className="text-center py-5">
                                                     <div className="mb-3"><i className="fas fa-box-open text-muted opacity-50" style={{ fontSize: '3rem' }}></i></div>
-                                                    <h6 className="fw-bold text-dark">Belum Ada Transaksi</h6>
+                                                    <h6 className="fw-bold text-body">Belum Ada Transaksi</h6>
                                                     <p className="text-muted small mb-3">Catat transaksi pertama Anda untuk melihat performa produk.</p>
                                                     <Link to="/transaction" className="btn btn-primary btn-sm px-4 rounded-pill">Catat Transaksi</Link>
                                                 </td>
@@ -272,9 +323,9 @@ function Index() {
                                 {totalTrans > 0 ? (
                                     <TrendChart labels={chartData.labels} sales={chartData.sales} profit={chartData.profit} />
                                 ) : (
-                                    <div className="d-flex flex-column justify-content-center align-items-center h-100 bg-light rounded text-center p-4">
+                                    <div className="d-flex flex-column justify-content-center align-items-center h-100 bg-body-tertiary rounded text-center p-4">
                                         <i className="fas fa-chart-line text-muted opacity-50 mb-3" style={{ fontSize: '3rem' }}></i>
-                                        <h6 className="fw-bold text-dark">Grafik Belum Tersedia</h6>
+                                        <h6 className="fw-bold text-body">Grafik Belum Tersedia</h6>
                                         <p className="text-muted small mb-0">Grafik analisis akan terbentuk secara otomatis<br/>setelah ada data penjualan.</p>
                                     </div>
                                 )}
@@ -283,8 +334,8 @@ function Index() {
                     )}
 
                     <div className="mt-auto" data-tour="tour-ai-insight">
-                        <Link to="/smart-predict" className="text-decoration-none text-dark">
-                            <div className="clean-card shadow-sm bg-light border-0 card-hover-effect">
+                        <Link to="/smart-predict" className="text-decoration-none text-body">
+                            <div className="clean-card shadow-sm bg-body-tertiary border-0 card-hover-effect">
                                 <div className="d-flex justify-content-between align-items-center mb-3">
                                     <h6 className="fw-bold m-0"><i className="fas fa-robot text-primary me-2" />AI Insight</h6>
                                     <div className="d-flex align-items-center text-primary small fw-bold">
@@ -300,7 +351,7 @@ function Index() {
                                         <small className="text-muted d-block mb-2">Saran Stok Otomatis:</small>
                                         <div className="small text-secondary d-flex flex-wrap gap-2 mt-2">
                                             {restockSuggestions.length > 0 ? restockSuggestions.slice(0, 4).map((product) => (
-                                                <span className="badge bg-white border text-dark px-2 py-1 rounded-pill shadow-sm" key={product.id} title={`Sisa Stok: ${product.current_stock}`}>
+                                                <span className="badge bg-body border text-body px-2 py-1 rounded-pill shadow-sm" key={product.id} title={`Sisa Stok: ${product.current_stock}`}>
                                                     {product.name} <span className="text-success ms-1 fw-bold">+{product.suggested_restock}</span>
                                                 </span>
                                             )) : (
