@@ -3,33 +3,37 @@
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     const now = new Date();
-    const twoDaysAgo = new Date(now);
-    twoDaysAgo.setDate(now.getDate() - 2);
+    
+    const anomalyDate1 = new Date(now);
+    anomalyDate1.setDate(now.getDate() - 1);
+    
+    const anomalyDate2 = new Date(now);
+    anomalyDate2.setDate(now.getDate() - 3);
 
     await queryInterface.bulkInsert('Anomaly_Tickets', [
       {
         user_id_fk: 1,
-        anomaly_type: 'MISSING_STOCK',
-        reference_id: 'PRD-4', // Sabun Mandi
-        description: 'AI mendeteksi selisih stok Sabun Mandi Cair Lifebuoy pada kasir shift malam sebesar 3 unit.',
-        status: 'open',
+        anomaly_type: 'TIME',
+        reference_id: 112, // Dummy transaction reference
+        description: 'AI mendeteksi transaksi besar dilakukan oleh Reza Fahlevi (Kasir Malam) pada pukul 03:00 pagi (di luar jam operasional).',
+        status: 'OPEN',
         resolution_note: null,
         resolved_at: null,
         resolved_by: null,
-        createdAt: twoDaysAgo,
-        updatedAt: twoDaysAgo
+        createdAt: anomalyDate1,
+        updatedAt: anomalyDate1
       },
       {
         user_id_fk: 1,
-        anomaly_type: 'PRICE_DROP_ALERT',
-        reference_id: 'PRD-2', // Roti Tawar
-        description: 'AI mendeteksi anomali: Roti Tawar Gandum dijual rugi secara drastis dalam 3 transaksi berturut-turut.',
-        status: 'resolved',
-        resolution_note: 'Memang sedang cuci gudang karena hampir expired.',
+        anomaly_type: 'PRICE',
+        reference_id: 85, // Dummy transaction reference
+        description: 'AI mendeteksi anomali: Reza Fahlevi menjual produk grosir dengan harga jual drastis jauh di bawah margin wajar (Kemungkinan penipuan margin).',
+        status: 'RESOLVED',
+        resolution_note: 'Sudah diinterogasi, ternyata salah input dari scanner barcode.',
         resolved_at: now,
         resolved_by: 1,
-        createdAt: new Date(now.getTime() - 24 * 60 * 60 * 1000), // yesterday
-        updatedAt: now
+        createdAt: anomalyDate2,
+        updatedAt: anomalyDate2
       }
     ], {});
   },

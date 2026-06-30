@@ -2,6 +2,7 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
+    const now = new Date();
     await queryInterface.bulkInsert('StoreSettings', [
       {
         setting_id: 1,
@@ -11,8 +12,8 @@ module.exports = {
         grace_period_minutes: 15,
         is_overtime_active: false,
         emergency_pin: '123456',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        createdAt: now,
+        updatedAt: now
       }
     ], {});
   },
