@@ -31,7 +31,11 @@ module.exports = {
     timezone: "+07:00",
     dialectOptions: {
       dateStrings: true,
-      typeCast: true
+      typeCast: true,
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
     }
   }
 };
