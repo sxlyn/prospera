@@ -32,13 +32,19 @@ exports.checkTimeAccess = async (req, res, next) => {
         }
 
         // --- CEK OVERTIME UNLOCKED UNTIL (BACKEND-DRIVEN SESSION) ---
-        const user = await User.findByPk(req.user.id);
+        // FIX (BUG-OT-01): Gunakan req.user.user_id bukan req.user.id.
+        // JWT payload menyimpan field user_id — req.user.id selalu undefined,
+        // sehingga findByPk(undefined) selalu mengembalikan null dan sesi lembur
+        // tidak pernah terdeteksi meski sudah berhasil di-unlock via PIN.
+        const userId = req.user.user_id || req.user.id;
+        const user = await User.findByPk(userId);
         if (user && user.overtime_unlocked_until) {
             const unlockedUntil = moment(user.overtime_unlocked_until);
             if (moment().isBefore(unlockedUntil)) {
                 return next(); // Sesi lembur masih aktif
             }
         }
+
 
         // --- VALIDASI WAKTU ---
         const now = moment().tz(TIMEZONE);

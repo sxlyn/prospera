@@ -187,10 +187,21 @@ export const apiFetchBlob = async (endpoint) => {
         throw new ApiError("Koneksi ke server terputus. Pastikan server aktif dan perangkat Anda terhubung ke internet.");
     }
 
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
         clearAuthSession();
         window.location.href = "/login";
         throw new ApiError("Sesi Anda telah berakhir. Silakan login kembali untuk melanjutkan.");
+    }
+
+    // FIX (BUG-BLOB-01): Pisahkan penanganan 403 dari 401.
+    // Sebelumnya keduanya digabung → 403 karena overtime (require_pin) menyebabkan
+    // user langsung di-logout, padahal seharusnya menampilkan modal PIN.
+    if (response.status === 403) {
+        const data = await response.json().catch(() => ({}));
+        if (data.require_pin) {
+            throw new ApiError(data.message || "Toko tutup. Masukkan PIN.", data);
+        }
+        throw new ApiError("Anda tidak memiliki hak akses untuk fitur ini.");
     }
 
     if (response.status === 429) {

@@ -319,7 +319,7 @@ function SmartExpiryWidget({ isDashboard = false }) {
                                                                 </td>
                                                                 <td>
                                                                     <div className="fw-bold text-danger">
-                                                                        {p.expired_date} ({Math.abs(p.days_left)} hari lewat)
+                                                                        {p.expired_date} ({p.days_left === 0 ? 'Hari ini!' : `${Math.abs(p.days_left)} hari lewat`})
                                                                     </div>
                                                                 </td>
                                                                 <td>
@@ -443,7 +443,7 @@ function SmartExpiryWidget({ isDashboard = false }) {
                                     <h5 className="fw-bold text-body">Apakah Anda yakin?</h5>
                                     <p className="text-muted mb-0">Tindakan pemusnahan stok ini bersifat final dan tidak dapat dibatalkan.</p>
                                 </div>
-                                <div className="bg-light rounded p-3 text-center">
+                                <div className="bg-body-secondary rounded p-3 text-center">
                                     <div className="text-muted small mb-1">Produk yang dimusnahkan:</div>
                                     <div className="fw-bold text-body fs-5">{productToWriteOff.product_name}</div>
                                     <div className="mt-2 text-danger fw-semibold">Jumlah: {productToWriteOff.product_stock} Unit</div>

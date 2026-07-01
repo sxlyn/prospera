@@ -45,7 +45,10 @@ exports.getExpiringProducts = async (req, res) => {
             const daysLeft = expiredDateMoment.diff(todayMoment, 'days');
             data.days_left = daysLeft;
 
-            if (daysLeft < 0) {
+            // FIX (BUG-EXP-01): Gunakan daysLeft <= 0 (bukan < 0).
+            // daysLeft === 0 berarti produk kedaluwarsa HARI INI — harus masuk
+            // ke tab Pemusnahan, bukan tab Segera Kedaluwarsa.
+            if (daysLeft <= 0) {
                 already_expired.push(data);
                 total_spoilage_loss += (data.product_cost * data.product_stock);
             } else {
@@ -247,8 +250,10 @@ exports.getAnomalies = async (req, res) => {
 
 exports.resolveAnomaly = async (req, res) => {
     try {
-        const ownerId = req.user.store_id || req.user.id || req.user.user_id;
-        const resolverId = req.user.id || req.user.user_id; // id user yang sedang login
+        const ownerId = req.user.store_id || req.user.user_id;
+        // FIX (BUG-RESOLVE-01): req.user adalah instance Sequelize, field-nya user_id bukan id.
+        // Fallback ke req.user.id untuk kompatibilitas jika field berubah di masa depan.
+        const resolverId = req.user.user_id || req.user.id;
         const { ticket_id, status, resolution_note } = req.body;
 
         if (!ownerId) {
