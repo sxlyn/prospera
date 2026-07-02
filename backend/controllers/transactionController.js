@@ -2,6 +2,7 @@ const { sequelize, Transaction, TransactionDetail, Product, Category, User, Stor
 const { Op } = require('sequelize'); 
 const ExcelJS = require('exceljs');
 const bcrypt = require('bcryptjs');
+const moment = require('moment-timezone'); // FIX (BUG-01 + BUG-02): Timezone-aware date operations
 
 // FIX (CRITICAL-03): Idempotency Key Store — Cegah transaksi duplikat
 // (misal: double-click tombol, retry jaringan, form re-submit)
@@ -296,13 +297,14 @@ const exportTransactionHistory = async (req, res, next) => {
         const userId = req.user.store_id;
         const { start, end, format } = req.query;
 
-        // FIX (MED-04): Default ke 30 hari terakhir jika tidak ada parameter tanggal
+        // FIX (MED-04 + BUG-01): Default ke 30 hari terakhir jika tidak ada parameter tanggal.
+        // SEBELUMNYA: toISOString() menghasilkan tanggal UTC, bukan WIB — bisa mundur 1 hari
+        //             antara jam 00:00–07:00 WIB (tengah malam sampai subuh).
+        // SESUDAH   : moment-timezone memastikan tanggal dihitung dalam zona WIB secara eksplisit.
         if (!start || !end) {
-            const today = new Date();
-            const thirtyDaysAgo = new Date(today);
-            thirtyDaysAgo.setDate(today.getDate() - 30);
-            end   = today.toISOString().split('T')[0];
-            start = thirtyDaysAgo.toISOString().split('T')[0];
+            const todayWIB = moment().tz('Asia/Jakarta');
+            end   = todayWIB.format('YYYY-MM-DD');
+            start = todayWIB.clone().subtract(30, 'days').format('YYYY-MM-DD');
         }
 
         // FIX (CRIT-02): Validasi format dan rentang tanggal maksimum 366 hari
@@ -457,13 +459,15 @@ const exportTransactionHistory = async (req, res, next) => {
             }
 
             transactions.forEach((tx) => {
-                // Format waktu WIB
-                const dateObj = new Date(tx.transaction_datetime);
-                const dateStr = tx.transaction_datetime ? new Intl.DateTimeFormat('id-ID', {
-                    timeZone: 'Asia/Jakarta',
-                    year: 'numeric', month: '2-digit', day: '2-digit',
-                    hour: '2-digit', minute: '2-digit', second: '2-digit'
-                }).format(dateObj) : '-';
+                // FIX (BUG-02): Gunakan moment-timezone yang konsisten dengan seluruh codebase.
+                // SEBELUMNYA: Intl.DateTimeFormat berpotensi double-shift jika MySQL session timezone
+                //             WIB (data masuk sebagai string WIB, di-parse Node.js sebagai UTC,
+                //             lalu Intl menambah +7 lagi → waktu maju 7 jam ke hari berikutnya).
+                // SESUDAH   : moment(value).tz('Asia/Jakarta') menangani konversi UTC→WIB secara
+                //             benar dan idiomatic — sama dengan checkTimeAnomaly di Transaction model.
+                const dateStr = tx.transaction_datetime
+                    ? moment(tx.transaction_datetime).tz('Asia/Jakarta').format('DD/MM/YYYY HH:mm:ss')
+                    : '-';
                 
                 const typeStr = tx.transaction_type === 'sell' ? 'Penjualan' : 'Restock';
                 const statusStr = tx.status === 'success' ? 'Sukses' : (tx.status === 'cancelled' ? 'Dibatalkan' : tx.status);

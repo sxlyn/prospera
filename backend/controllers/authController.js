@@ -103,6 +103,9 @@ const login = async (req, res, next) => {
  * Logout — Menarik JWT dan memasukkan JTI ke Blacklist
  */
 const logout = async (req, res, next) => {
+    // FIX (BUG-09): Pisahkan operasi DB dan operasi Cookie ke dalam try/finally.
+    // Cookie HARUS selalu dihapus meski operasi DB (blacklist/update) gagal,
+    // sehingga pengguna tidak terjebak dalam state "token aktif tapi sesi mati".
     try {
         const token = req.cookies && req.cookies['jwt'];
         if (token) {
@@ -123,17 +126,32 @@ const logout = async (req, res, next) => {
         // Hapus jendela waktu lembur agar tidak diwariskan ke sesi berikutnya
         if (req.user && (req.user.id || req.user.user_id)) {
             const userId = req.user.id || req.user.user_id;
-            await User.update(
-                { overtime_unlocked_until: null },
-                { where: { user_id: userId } }
-            );
+            try {
+                await User.update(
+                    { overtime_unlocked_until: null },
+                    { where: { user_id: userId } }
+                );
+            } catch (dbErr) {
+                // BUG-09 FIX: Log error DB tapi jangan hentikan proses logout.
+                // Cookie harus tetap dihapus walau DB update gagal.
+                console.error("Gagal reset overtime saat logout (non-fatal):", dbErr.message);
+            }
         }
-
-        // Hancurkan cookie di browser klien
-        res.clearCookie('jwt');
-        res.status(200).json({ message: "Berhasil keluar (Sesi dihapus mutlak)." });
     } catch (error) {
-        next(error);
+        // Log unexpected errors tapi tetap lanjutkan untuk hapus cookie
+        console.error("Error tak terduga saat logout:", error.message);
+    } finally {
+        // FIX (BUG-03): Sertakan opsi yang IDENTIK dengan saat cookie dibuat.
+        // Browser hanya menghapus cookie jika path, secure, dan sameSite cocok.
+        // SEBELUMNYA: res.clearCookie('jwt') — tanpa opsi → cookie TIDAK terhapus di production
+        //             karena browser membandingkan atribut cookie sebelum menghapus.
+        // SESUDAH   : opsi secure + sameSite selaras dengan res.cookie() di fungsi login.
+        res.clearCookie('jwt', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax'
+        });
+        res.status(200).json({ message: "Berhasil keluar (Sesi dihapus mutlak)." });
     }
 };
 

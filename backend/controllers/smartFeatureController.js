@@ -122,8 +122,11 @@ exports.applyMarkdown = async (req, res) => {
         const ownerId = req.user.store_id;
         const { product_id, new_price } = req.body;
 
-        if (!product_id || new_price === undefined || new_price < 0) {
-            return res.status(400).json({ message: "Data tidak lengkap atau harga tidak valid." });
+        // FIX (BUG-05): Validasi harga lebih ketat.
+        // SEBELUMNYA: hanya menolak new_price < 0 — harga Rp 0 atau Rp 1 lolos tanpa peringatan.
+        // SESUDAH   : harga harus > 0, dan di-validasi lagi terhadap harga modal setelah produk ditemukan.
+        if (!product_id || new_price === undefined || new_price === null || Number(new_price) <= 0) {
+            return res.status(400).json({ message: "Data tidak lengkap atau harga tidak valid. Harga harus lebih dari Rp 0." });
         }
 
         const product = await Product.findOne({
@@ -135,6 +138,17 @@ exports.applyMarkdown = async (req, res) => {
 
         if (!product) {
             return res.status(404).json({ message: "Produk tidak ditemukan." });
+        }
+
+        // FIX (BUG-05): Batas minimum 10% dari harga modal.
+        // Memberi ruang diskon besar untuk produk expired (hingga -90% modal),
+        // tapi mencegah harga absurd (Rp 1) yang merusak laporan P&L dan tidak terdeteksi anomali.
+        const MINIMUM_MARKDOWN_FACTOR = 0.10; // 10% dari modal
+        const minimumAllowedPrice = Math.ceil(product.product_cost * MINIMUM_MARKDOWN_FACTOR);
+        if (Number(new_price) < minimumAllowedPrice) {
+            return res.status(400).json({
+                message: `Harga markdown terlalu rendah. Minimum yang diizinkan adalah Rp ${minimumAllowedPrice.toLocaleString('id-ID')} (10% dari harga modal Rp ${product.product_cost.toLocaleString('id-ID')}).`
+            });
         }
 
         // Simpan harga asli sebelum di-markdown jika belum ada kolom khusus? (Untuk MVP, kita replace langsung sesuai instruksi)
@@ -150,6 +164,7 @@ exports.applyMarkdown = async (req, res) => {
         res.status(500).json({ message: "Terjadi kesalahan pada server saat mengaplikasikan diskon." });
     }
 };
+
 
 exports.getAnomalies = async (req, res) => {
     try {

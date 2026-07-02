@@ -111,6 +111,13 @@ const validateChangePassword = (req, res, next) => {
         return res.status(400).json({ message: "Password baru wajib diisi dan minimal 6 karakter." });
     }
 
+    // FIX (BUG-11): Tambahkan batas maksimal 64 karakter \u2014 konsisten dengan validateRegister & validateLogin.
+    // Bcrypt hanya memproses 72 byte pertama; password > 64 karakter tidak menambah keamanan
+    // tapi bisa dimanfaatkan penyerang untuk ReDoS via slow hashing (DoS attack vector).
+    if (String(new_password).length > 64) {
+        return res.status(400).json({ message: "Password baru maksimal 64 karakter." });
+    }
+
     if (old_password === new_password) {
         return res.status(400).json({ message: "Password baru tidak boleh sama dengan password lama." });
     }

@@ -28,7 +28,10 @@ export function useTransactionLogic() {
             const data = await apiFetch("/products");
             setProducts(data.products ? data.products : (Array.isArray(data) ? data : []));
         } catch (error) {
-            historyHook.fetchError || console.error("Gagal memuat produk:", error);
+            // FIX (BUG-08): Hapus referensi historyHook.fetchError yang selalu null saat catch ini
+            // terpanggil \u2014 historyHook.fetchError hanya berubah setelah fetchHistory() selesai,
+            // bukan setelah fetchProducts() gagal. Error kini selalu di-log secara konsisten.
+            console.error("Gagal memuat produk:", error);
         }
     };
 

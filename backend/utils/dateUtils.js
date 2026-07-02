@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const moment = require("moment-timezone");
+const moment = require("moment-timezone"); // FIX (BUG-07): Dibutuhkan oleh getDateFilter untuk WIB-aware date range
 
 /**
  * SECURITY FIX (B-T12): Validasi format tanggal sebelum new Date().
@@ -21,11 +21,13 @@ const getDateFilter = (startDate, endDate) => {
             return {}; // Abaikan filter jika format invalid
         }
 
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
+        // FIX (BUG-07): Ganti setHours() yang timezone-naif dengan moment-timezone WIB.
+        // SEBELUMNYA: new Date(dateStr).setHours(0,0,0,0) menggunakan timezone SERVER (UTC),
+        //             sehingga 00:00 WIB = 17:00 UTC hari sebelumnya \u2014 data transaksi antara
+        //             00:00\u201306:59 WIB terlewat karena dianggap berada di hari kemarin.
+        // SESUDAH   : Konsisten dengan buildWIBDateRange di bawah \u2014 single source of truth.
+        const start = moment.tz(startDate + ' 00:00:00', 'YYYY-MM-DD HH:mm:ss', 'Asia/Jakarta').toDate();
+        const end   = moment.tz(endDate   + ' 23:59:59', 'YYYY-MM-DD HH:mm:ss', 'Asia/Jakarta').toDate();
 
         return {
             transaction_datetime: {

@@ -121,7 +121,10 @@ export default function HistorySection({
           </table>
 
           {/* Pagination Controls */}
-          {historyTotalPages > 1 && !historySearchTerm && activeTab === "ALL" && (
+          {/* FIX (BUG-04): Hapus kondisi activeTab === "ALL" \u2014 pagination sebelumnya
+              menghilang total saat tab Penjualan/Restock aktif, walau ada banyak halaman.
+              Pagination kini muncul kapanpun ada lebih dari 1 halaman & tidak ada search aktif. */}
+          {historyTotalPages > 1 && !historySearchTerm && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", borderTop: "1px solid #e5e7eb", paddingTop: "15px" }}>
               <span style={{ fontSize: "14px", color: "gray" }}>
                 Menampilkan halaman {historyPage} dari {historyTotalPages} ({historyTotalItems} riwayat)
