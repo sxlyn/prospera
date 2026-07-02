@@ -79,7 +79,7 @@ const login = async (req, res, next) => {
         res.cookie('jwt', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'Lax', // Cross-port CSRF protection
+            sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax', // FIX: Wajib 'None' jika Vercel (Frontend) dan Railway (Backend) beda domain
             maxAge: 24 * 60 * 60 * 1000 // 1 Hari
         });
 
