@@ -162,8 +162,8 @@ sequelize.authenticate()
         const { startCronJobs } = require('./jobs/cronJobs');
         startCronJobs();
 
-        const server = app.listen(PORT, () => {
-            logger.info(`Server Node.js aktif`, {
+        const server = app.listen(PORT, '0.0.0.0', () => {
+            logger.info(`Server Node.js aktif (0.0.0.0:${PORT})`, {
                 port: PORT,
                 corsOrigin: CORS_ORIGIN,
                 bodyLimit: BODY_SIZE_LIMIT,
