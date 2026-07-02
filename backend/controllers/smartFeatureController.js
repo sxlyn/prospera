@@ -151,13 +151,16 @@ exports.applyMarkdown = async (req, res) => {
             });
         }
 
-        // Simpan harga asli sebelum di-markdown jika belum ada kolom khusus? (Untuk MVP, kita replace langsung sesuai instruksi)
-        // Harga baru langsung diupdate
         await product.update({ product_price: new_price });
 
+        // FIX (BUG-A09): Kembalikan hanya field yang dibutuhkan frontend, bukan objek produk penuh.
+        // SEBELUMNYA: res.json({ product }) — membocorkan product_cost (harga modal sensitif),
+        //             user_id_fk (internal tenant ID), dan semua field internal lainnya.
+        // SESUDAH   : Hanya kirim product_id dan harga baru sebagai konfirmasi update.
         res.status(200).json({ 
-            message: "Harga jual produk berhasil diperbarui (Markdown applied).", 
-            product 
+            message: "Harga jual produk berhasil diperbarui (Markdown applied).",
+            product_id: product.product_id,
+            new_price: Number(new_price)
         });
     } catch (error) {
         console.error("Error applying markdown:", error);

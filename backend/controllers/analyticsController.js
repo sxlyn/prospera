@@ -1,5 +1,6 @@
 const { sequelize, Transaction, TransactionDetail, Product, InventoryLog } = require("../models");
 const { Op, fn, col, literal } = require("sequelize");
+const moment = require("moment-timezone"); // FIX (BUG-A05): Untuk prev-period date calculation yang timezone-safe
 const { getDateFilter, buildWIBDateRange } = require("../utils/dateUtils");
 const { getStatusBreakdown, getFinancialSummary, getProductBreakdown } = require("../services/analyticsService"); 
 
@@ -36,20 +37,23 @@ const getSummary = async (req, res, next) => {
         // Revenue growth (logika unik untuk endpoint ini, tetap inline)
         let revenue_growth = "N/A";
         if (startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24)) || 1;
+            // FIX (BUG-A05): Gunakan moment-timezone untuk kalkulasi periode sebelumnya.
+            // SEBELUMNYA: new Date(startDate) + setDate() + toISOString().split('T')[0]
+            //             — toISOString() mengembalikan UTC string, bisa off 1 hari jika
+            //             server timezone berubah atau startDate datang dengan offset.
+            // SESUDAH   : moment() untuk manipulasi tanggal yang timezone-safe dan konsisten.
+            const momentStart = moment(startDate, 'YYYY-MM-DD');
+            const momentEnd   = moment(endDate,   'YYYY-MM-DD');
+            const diffDays = momentEnd.diff(momentStart, 'days') || 1;
 
-            const prevEnd = new Date(start);
-            prevEnd.setDate(prevEnd.getDate() - 1);
-            const prevStart = new Date(prevEnd);
-            prevStart.setDate(prevStart.getDate() - diffDays + 1);
+            const prevEndDate   = momentStart.clone().subtract(1, 'days').format('YYYY-MM-DD');
+            const prevStartDate = momentStart.clone().subtract(diffDays, 'days').format('YYYY-MM-DD');
 
             const prevFinancialData = await TransactionDetail.findAll({
                 include: [{
                     model: Transaction,
                     attributes: [],
-                    where: { ...getDateFilter(prevStart.toISOString().split('T')[0], prevEnd.toISOString().split('T')[0]), user_id_fk: userId, status: 'success' }
+                    where: { ...getDateFilter(prevStartDate, prevEndDate), user_id_fk: userId, status: 'success' }
                 }],
                 where: { transaction_type: 'sell' },
                 attributes: [[literal(`SUM(selling_price * quantity)`), 'prev_revenue']],

@@ -337,6 +337,14 @@ const resetUserPasswordById = async (req, res, next) => {
             return res.status(400).json({ message: "Password minimal 6 karakter." });
         }
 
+        // FIX (BUG-A04): Tambahkan batas maksimal 64 karakter — konsisten dengan
+        // validateRegister, validateLogin, dan validateChangePassword.
+        // Bcrypt hanya memproses 72 byte pertama; input > 64 karakter tidak menambah
+        // keamanan tapi berpotensi dipakai untuk slow-hash DoS via endpoint ini.
+        if (password.length > 64) {
+            return res.status(400).json({ message: "Password maksimal 64 karakter." });
+        }
+
         const targetUser = await User.findOne({
             where: {
                 user_id: targetId,

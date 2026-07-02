@@ -5,10 +5,19 @@ const { Sequelize, Op } = require('sequelize');
 const getForecast = async (req, res, next) => {
   try {
     const userId = req.user.store_id;
+    const moment = require('moment-timezone');
 
-    const timeZoneAdj = "transaction_datetime + INTERVAL 7 HOUR";
+    // FIX (BUG-A06): Ganti `transaction_datetime + INTERVAL 7 HOUR` yang hardcoded.
+    // SEBELUMNYA: + INTERVAL 7 HOUR mengasumsikan server selalu UTC. Jika MySQL session
+    //             timezone dikonfigurasi WIB, penambahan 7 jam menjadi double-shift (+14 jam).
+    // SESUDAH   :
+    //   1. CONVERT_TZ dengan fixed-offset notation (+00:00 → +07:00) tidak memerlukan
+    //      MySQL timezone tables dan bekerja di semua provider cloud.
+    //   2. Batas 7 hari dihitung di Node.js dengan moment-timezone WIB agar konsisten
+    //      dengan seluruh codebase, bukan bergantung pada DATE_SUB(NOW()) server.
+    const timeZoneAdj = "CONVERT_TZ(transaction_datetime, '+00:00', '+07:00')";
+    const sevenDaysAgo = moment().tz('Asia/Jakarta').subtract(7, 'days').startOf('day').toDate();
 
-    // Ambil data penjualan harian 7 hari terakhir (hanya transaksi sukses)
     const dailyData = await Transaction.findAll({
       attributes: [
         [Sequelize.literal(`DATE(${timeZoneAdj})`), 'date'],
@@ -17,9 +26,7 @@ const getForecast = async (req, res, next) => {
       where: {
         user_id_fk: userId,
         status: 'success',
-        [Op.and]: Sequelize.literal(
-          `${timeZoneAdj} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`
-        )
+        transaction_datetime: { [Op.gte]: sevenDaysAgo }
       },
       group: [Sequelize.literal(`DATE(${timeZoneAdj})`)],
       raw: true

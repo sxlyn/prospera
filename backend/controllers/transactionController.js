@@ -249,8 +249,14 @@ const getTransactionHistory = async (req, res, next) => {
 
         // Filter berdasarkan kolom transaction_datetime
         if (start && end) {
+            // FIX (BUG-A02): Ganti string literal dengan moment-timezone WIB-aware Date object.
+            // SEBELUMNYA: `${start} 00:00:00` diinterpretasikan MySQL sesuai session timezone server (UTC),
+            //             sehingga data transaksi antara 00:00–06:59 WIB terlewat dari riwayat.
+            // SESUDAH   : moment.tz() eksplisit membangun boundary dalam WIB sebelum dikirim ke Sequelize.
+            const start_wib = moment.tz(start + ' 00:00:00', 'YYYY-MM-DD HH:mm:ss', 'Asia/Jakarta').toDate();
+            const end_wib   = moment.tz(end   + ' 23:59:59', 'YYYY-MM-DD HH:mm:ss', 'Asia/Jakarta').toDate();
             whereCondition.transaction_datetime = {
-                [Op.between]: [`${start} 00:00:00`, `${end} 23:59:59`]
+                [Op.between]: [start_wib, end_wib]
             };
         }
         
@@ -295,7 +301,11 @@ const getTransactionHistory = async (req, res, next) => {
 const exportTransactionHistory = async (req, res, next) => {
     try {
         const userId = req.user.store_id;
-        const { start, end, format } = req.query;
+        // FIX (BUG-A01): Gunakan let agar start/end bisa di-reassign saat tidak ada parameter.
+        // SEBELUMNYA: const { start, end } — reassign di bawah menyebabkan TypeError crash.
+        // SESUDAH   : let memungkinkan fallback ke default 30 hari berjalan dengan benar.
+        let { start, end } = req.query;
+        const { format } = req.query;
 
         // FIX (MED-04 + BUG-01): Default ke 30 hari terakhir jika tidak ada parameter tanggal.
         // SEBELUMNYA: toISOString() menghasilkan tanggal UTC, bukan WIB — bisa mundur 1 hari
@@ -324,10 +334,14 @@ const exportTransactionHistory = async (req, res, next) => {
             });
         }
 
+        // FIX (BUG-A02): moment-timezone WIB boundary — konsisten dengan getDateFilter() di dateUtils.js.
         const whereCondition = {
             user_id_fk: userId,
             transaction_datetime: {
-                [Op.between]: [`${start} 00:00:00`, `${end} 23:59:59`]
+                [Op.between]: [
+                    moment.tz(start + ' 00:00:00', 'YYYY-MM-DD HH:mm:ss', 'Asia/Jakarta').toDate(),
+                    moment.tz(end   + ' 23:59:59', 'YYYY-MM-DD HH:mm:ss', 'Asia/Jakarta').toDate()
+                ]
             }
         };
 
@@ -564,8 +578,12 @@ const getTransactionSummary = async (req, res, next) => {
         // Bangun filter tanggal yang konsisten dengan endpoint lain (Op.between)
         const dateFilter = {};
         if (start && end) {
+            // FIX (BUG-A02): moment-timezone WIB — sama dengan getTransactionHistory.
             dateFilter.transaction_datetime = {
-                [Op.between]: [`${start} 00:00:00`, `${end} 23:59:59`]
+                [Op.between]: [
+                    moment.tz(start + ' 00:00:00', 'YYYY-MM-DD HH:mm:ss', 'Asia/Jakarta').toDate(),
+                    moment.tz(end   + ' 23:59:59', 'YYYY-MM-DD HH:mm:ss', 'Asia/Jakarta').toDate()
+                ]
             };
         }
 

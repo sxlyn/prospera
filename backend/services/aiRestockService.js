@@ -1,5 +1,6 @@
 const { TransactionDetail, Transaction } = require('../models');
 const { Op, fn, col } = require('sequelize');
+const moment = require('moment-timezone'); // FIX (BUG-A10): WIB-aware 30-day velocity boundary
 
 /**
  * Enterprise AI Restock Engine
@@ -12,8 +13,10 @@ const calculateRestockForProducts = async (userId, productIds, productDataMap) =
     }
 
     // 1. Sub-query Absolute 30-Day Velocity
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // FIX (BUG-A10): Ganti new Date() + setDate() (UTC-naive) dengan moment-timezone WIB.
+    // Selisih 7 jam antara UTC dan WIB kecil relatif terhadap window 30 hari (<1% drift),
+    // tapi penting untuk konsistensi dengan standar WIB seluruh codebase.
+    const thirtyDaysAgo = moment().tz('Asia/Jakarta').subtract(30, 'days').startOf('day').toDate();
     
     const velocityData = await TransactionDetail.findAll({
         attributes: [

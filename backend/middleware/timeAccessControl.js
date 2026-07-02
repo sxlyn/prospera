@@ -59,30 +59,28 @@ exports.checkTimeAccess = async (req, res, next) => {
         
         const closeHourWithGrace = closeMoment.format('HH:mm:ss');
 
-        // Pengecekan:
-        // Apakah waktu sekarang KURANG dari open_hour?
-        const isTooEarly = currentTime < openHour;
-        
-        // Apakah waktu sekarang LEBIH dari close_hour + grace_period?
-        // Catatan: Jika toko buka sampai lewat tengah malam (misal tutup jam 02:00 pagi), logika komparasi string sederhana bisa bermasalah.
-        // Untuk standar UMKM (Buka Pagi, Tutup Malam di hari yang sama), komparasi string jam sudah cukup akurat.
-        let isTooLate = false;
-        
+        // FIX (BUG-A07): Refactor isTooEarly + isTooLate menjadi satu blok kondisional.
+        // SEBELUMNYA: isTooEarly dihitung di luar kondisi — untuk skenario lintas-hari
+        //             (misal buka 18:00, tutup 02:00), karyawan jam 01:00 WIB ditolak
+        //             karena isTooEarly = true (01:00 < 18:00) walau masih dalam jam kerja.
+        // SESUDAH   : Dua jalur terpisah (normal vs lintas-hari) masing-masing menghitung
+        //             kedua variabel secara independen dan benar.
+        let isTooEarly = false;
+        let isTooLate  = false;
+
         if (openHour <= closeHourWithGrace) {
-            // Jam normal (misal buka 08:00, tutup 22:30)
-            isTooLate = currentTime > closeHourWithGrace;
+            // Jam NORMAL: buka dan tutup di hari yang sama (misal 08:00 – 22:30)
+            isTooEarly = currentTime < openHour;
+            isTooLate  = currentTime > closeHourWithGrace;
         } else {
-            // Jam lintas hari (misal buka 18:00, tutup 02:00)
-            if (currentTime >= openHour || currentTime <= closeHourWithGrace) {
-                // Di dalam jam kerja lintas hari (isTooLate = false)
-                isTooLate = false;
-                // isTooEarly juga harus di reset karena ini lintas hari
-                if (currentTime >= openHour || currentTime <= closeHourWithGrace) {
-                    // Berarti aman
-                }
-            } else {
-                isTooLate = true; // Berada di antara jam tutup dan jam buka
+            // Jam LINTAS HARI: tutup setelah tengah malam (misal buka 18:00, tutup 02:00)
+            // Akses DITOLAK hanya jika berada di antara jam tutup dan jam buka:
+            // yaitu currentTime > closeHourWithGrace DAN currentTime < openHour
+            // (misal jam 03:00 – 17:59 pada contoh di atas)
+            if (currentTime > closeHourWithGrace && currentTime < openHour) {
+                isTooLate = true; // Di luar jam operasional lintas-hari
             }
+            // isTooEarly tetap false — tidak relevan untuk skenario lintas-hari
         }
 
         if (isTooEarly || isTooLate) {
