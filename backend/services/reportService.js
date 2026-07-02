@@ -27,7 +27,7 @@ class ExcelReport extends BaseReport {
             useStyles: true,
             useSharedStrings: true
         });
-        const headerRowIndex = this.isOwner ? 14 : 13;
+        const headerRowIndex = this.isOwner ? 17 : 13;
         const sheet = workbook.addWorksheet('Laporan Prospera', {
             views: [{ state: 'frozen', ySplit: headerRowIndex, xSplit: 0 }]
         });
@@ -73,8 +73,20 @@ class ExcelReport extends BaseReport {
         });
         
         if (this.isOwner) {
-            writeRow(['Total Profit', Number(this.summary.total_profit) || 0], (row) => {
+            writeRow(['Laba Kotor', Number(this.summary.total_profit) || 0], (row) => {
                 row.getCell(2).style = { numFmt: '[$Rp-421]#,##0' };
+            });
+            writeRow(['(-) Defisit Markdown', Number(this.summary.total_loss) || 0], (row) => {
+                row.getCell(2).style = { numFmt: '[$Rp-421]#,##0' };
+                row.getCell(1).font = { color: { argb: 'FFFF0000' } };
+            });
+            writeRow(['(-) Kerugian Kedaluwarsa', Number(this.summary.spoilage_loss) || 0], (row) => {
+                row.getCell(2).style = { numFmt: '[$Rp-421]#,##0' };
+                row.getCell(1).font = { color: { argb: 'FFFF0000' } };
+            });
+            writeRow(['Laba Bersih', Number(this.summary.net_profit) || 0], (row) => {
+                row.getCell(2).style = { numFmt: '[$Rp-421]#,##0' };
+                row.font = { bold: true };
             });
         }
         writeRow([]);
@@ -183,7 +195,10 @@ class CsvReport extends BaseReport {
         writeRow(['Produk Terjual', Number(this.summary.items_sold) || 0]);
         writeRow(['Total Omzet', Number(this.summary.revenue) || 0]);
         if (this.isOwner) {
-            writeRow(['Total Profit', Number(this.summary.total_profit) || 0]);
+            writeRow(['Laba Kotor', Number(this.summary.total_profit) || 0]);
+            writeRow(['(-) Defisit Markdown', Number(this.summary.total_loss) || 0]);
+            writeRow(['(-) Kerugian Kedaluwarsa', Number(this.summary.spoilage_loss) || 0]);
+            writeRow(['Laba Bersih', Number(this.summary.net_profit) || 0]);
         }
         writeRow([]);
         

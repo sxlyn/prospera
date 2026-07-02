@@ -25,7 +25,10 @@ const exportSummaryExcel = async (req, res, next) => {
                 total_transaction: statusBreakdown.total_transaction_all,
                 items_sold: financial.items_sold,
                 revenue: financial.revenue,
-                total_profit: financial.total_profit
+                total_profit: financial.total_profit,
+                total_loss: financial.total_loss,
+                spoilage_loss: financial.spoilage_loss,
+                net_profit: financial.net_profit
             },
             status_breakdown: {
                 success: statusBreakdown.success,
@@ -66,7 +69,10 @@ const exportSummaryCsv = async (req, res, next) => {
                 total_transaction: statusBreakdown.total_transaction_all,
                 items_sold: financial.items_sold,
                 revenue: financial.revenue,
-                total_profit: financial.total_profit
+                total_profit: financial.total_profit,
+                total_loss: financial.total_loss,
+                spoilage_loss: financial.spoilage_loss,
+                net_profit: financial.net_profit
             },
             status_breakdown: {
                 success: statusBreakdown.success,
