@@ -665,10 +665,12 @@ const unlockOvertime = async (req, res, next) => {
             return res.status(401).json({ message: "PIN Darurat salah." });
         }
 
-        // Anti-Clock Drift: Gunakan literal query MySQL untuk +1 Jam
-        await sequelize.query(
-            "UPDATE Users SET overtime_unlocked_until = CURRENT_TIMESTAMP + INTERVAL 1 HOUR WHERE user_id = ?",
-            { replacements: [req.user.user_id || req.user.id], type: sequelize.QueryTypes.UPDATE }
+        // Anti-Clock Drift (Diperbaiki): Generate UTC absolut di Node.js, bukan di database.
+        // Ini menghindari Timezone Mismatch jika server Node.js dan MySQL berbeda zona waktu.
+        const overtimeLimit = moment.utc().add(1, 'hour').toDate();
+        await User.update(
+            { overtime_unlocked_until: overtimeLimit },
+            { where: { user_id: req.user.user_id || req.user.id } }
         );
 
         res.json({ message: "Sesi lembur berhasil diaktifkan selama 1 jam." });
