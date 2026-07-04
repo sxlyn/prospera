@@ -82,11 +82,7 @@ export const printReceipt = (transactionData) => {
         </head>
         <body>
             <div class="ticket">
-                <div class="text-center">
-                    <h2 style="margin: 0 0 5px 0;">TOKO PROSPERA</h2>
-                    <div>Jl. Universitas Mikroskil, Medan</div>
-                    <div>Telp: 0812-3456-7890</div>
-                </div>
+                <div style="margin-bottom: 15px;"></div>
                 <div class="border-dashed"></div>
                 <div>
                     <div class="d-flex"><span>Tgl:</span> <span>${escapeHtml(date)}</span></div>
